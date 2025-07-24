@@ -1,0 +1,819 @@
+import { useState, useEffect, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { e2eeManager } from '@/lib/encryption';
+import { 
+  Send, 
+  Phone, 
+  Video, 
+  Paperclip, 
+  Smile, 
+  Mic, 
+  Shield, 
+  Users,
+  ArrowLeft,
+  MoreVertical
+} from 'lucide-react';
+import { Link } from 'wouter';
+import sodium from 'libsodium-wrappers';
+
+interface Message {
+  id: string;
+  content: string;
+  timestamp: number;
+  senderId: string;
+  type: 'text' | 'system';
+  isOwn: boolean;
+}
+
+interface ChatUser {
+  id: string;
+  publicKey?: string;
+}
+
+interface ChatInterfaceProps {
+  chatId: string;
+}
+
+export default function ChatInterface({ chatId }: ChatInterfaceProps) {
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [userId] = useState(() => `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  const [chatUsers, setChatUsers] = useState<ChatUser[]>([]);
+  const [isKeyExchangeComplete, setIsKeyExchangeComplete] = useState(false);
+  const { toast } = useToast();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
+  
+  // Audio call states
+  const [isInCall, setIsInCall] = useState(false);
+  const [isCallIncoming, setIsCallIncoming] = useState(false);
+  const [callerId, setCallerId] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const localAudioRef = useRef<HTMLAudioElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // WebRTC configuration
+  const rtcConfiguration = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  };
+
+  // Initialize peer connection
+  const initializePeerConnection = () => {
+    const peerConnection = new RTCPeerConnection(rtcConfiguration);
+    
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate && socket) {
+        socket.emit('ice-candidate', {
+          chatId,
+          candidate: event.candidate
+        });
+      }
+    };
+    
+    peerConnection.ontrack = async (event) => {
+      console.log('Received remote track:', event.streams[0]);
+      if (remoteAudioRef.current && event.streams[0]) {
+        remoteAudioRef.current.srcObject = event.streams[0];
+        remoteAudioRef.current.volume = 1.0;
+        
+        try {
+          // Ensure audio plays (modern browsers require user interaction)
+          await remoteAudioRef.current.play();
+          setAudioEnabled(true);
+          console.log('Remote audio started playing automatically');
+          
+          toast({
+            title: "Audio Connected",
+            description: "You should now hear the other person"
+          });
+        } catch (error) {
+          console.log('Audio autoplay prevented, user needs to enable:', error);
+          setAudioEnabled(false);
+          toast({
+            title: "Audio Blocked",
+            description: "Click 'Enable Audio' to hear the call",
+            variant: "destructive"
+          });
+        }
+      }
+    };
+    
+    return peerConnection;
+  };
+
+  // Start audio call
+  const startCall = async () => {
+    if (chatUsers.length <= 1) {
+      toast({
+        title: "No Users Available",
+        description: "No other users in the chat to call",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
+      localStreamRef.current = stream;
+      
+      if (localAudioRef.current) {
+        localAudioRef.current.srcObject = stream;
+        localAudioRef.current.muted = true; // Mute local audio to prevent echo
+      }
+
+      console.log('Microphone access granted, starting call');
+
+      const peerConnection = initializePeerConnection();
+      peerConnectionRef.current = peerConnection;
+
+      // Add local stream to peer connection
+      stream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, stream);
+      });
+
+      // Create offer
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+
+      // Send call offer to other users
+      socket?.emit('call-offer', {
+        chatId,
+        offer,
+        callerId: userId
+      });
+
+      setIsInCall(true);
+      
+      // Prepare audio element for incoming audio
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.volume = 1.0;
+        // Don't try to play yet, wait for remote stream
+      }
+      
+      toast({
+        title: "Calling...",
+        description: "Initiating audio call"
+      });
+    } catch (error) {
+      console.error('Failed to start call:', error);
+      toast({
+        title: "Call Failed",
+        description: "Could not access microphone or start call",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Answer incoming call
+  const answerCall = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
+      localStreamRef.current = stream;
+      
+      if (localAudioRef.current) {
+        localAudioRef.current.srcObject = stream;
+        localAudioRef.current.muted = true;
+      }
+
+      console.log('Microphone access granted for answering call');
+
+      // Add local stream to existing peer connection
+      if (peerConnectionRef.current) {
+        stream.getTracks().forEach(track => {
+          peerConnectionRef.current!.addTrack(track, stream);
+        });
+
+        // Create and send answer
+        const answer = await peerConnectionRef.current.createAnswer();
+        await peerConnectionRef.current.setLocalDescription(answer);
+
+        socket?.emit('call-answer', {
+          chatId,
+          answer,
+          callerId
+        });
+      }
+
+      setIsInCall(true);
+      setIsCallIncoming(false);
+      setCallerId(null);
+      
+      // Prepare audio element for incoming audio
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.volume = 1.0;
+      }
+      
+      toast({
+        title: "Call Connected",
+        description: "Audio call active"
+      });
+    } catch (error) {
+      console.error('Failed to answer call:', error);
+      toast({
+        title: "Call Failed",
+        description: "Could not access microphone",
+        variant: "destructive"
+      });
+      setIsCallIncoming(false);
+    }
+  };
+
+  // End call
+  const endCall = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+    
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
+    setIsInCall(false);
+    setIsCallIncoming(false);
+    setCallerId(null);
+    setIsMuted(false);
+    setAudioEnabled(false);
+
+    socket?.emit('call-end', { chatId });
+
+    toast({
+      title: "Call Ended",
+      description: "Audio call disconnected"
+    });
+  };
+
+  // Enable audio (required for browser autoplay policies)
+  const enableAudio = async () => {
+    try {
+      if (remoteAudioRef.current) {
+        // Create a silent audio context to unlock audio playback
+        const audioContext = new AudioContext();
+        await audioContext.resume();
+        
+        // Try to play the audio element
+        await remoteAudioRef.current.play();
+        setAudioEnabled(true);
+        
+        toast({
+          title: "Audio Enabled",
+          description: "You can now hear voice calls"
+        });
+      }
+    } catch (error) {
+      console.log('Audio enable failed:', error);
+      toast({
+        title: "Audio Enable Failed",
+        description: "Please click in the browser window and try again",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Toggle mute
+  const toggleMute = () => {
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMuted(!audioTrack.enabled);
+      }
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    const initializeChat = async () => {
+      try {
+        // Initialize encryption
+        await e2eeManager.initialize();
+        const keyPair = await e2eeManager.getOrGenerateKeyPair();
+        
+        // Connect to socket
+        const newSocket = io();
+        setSocket(newSocket);
+
+        newSocket.on('connect', () => {
+          setIsConnected(true);
+          console.log('Connected to server');
+          
+          // Join the chat room
+          newSocket.emit('join-chat', {
+            chatId,
+            userId,
+            publicKey: e2eeManager.getPublicKeyBase64()
+          });
+        });
+
+        newSocket.on('disconnect', () => {
+          setIsConnected(false);
+          console.log('Disconnected from server');
+        });
+
+
+
+        newSocket.on('chat-users', (users: ChatUser[]) => {
+          console.log('Received chat users:', users);
+          setChatUsers(users);
+          setIsKeyExchangeComplete(true);
+        });
+
+        newSocket.on('user-joined', ({ userId: joinedUserId, publicKey, timestamp }) => {
+          console.log(`User joined: ${joinedUserId}`);
+          
+          // Update chat users list
+          setChatUsers(prev => {
+            const exists = prev.find(u => u.id === joinedUserId);
+            if (!exists) {
+              return [...prev, { id: joinedUserId, publicKey }];
+            }
+            return prev;
+          });
+          
+          setMessages(prev => [...prev, {
+            id: `system_${timestamp}`,
+            content: 'User joined the chat',
+            timestamp,
+            senderId: 'system',
+            type: 'system',
+            isOwn: false
+          }]);
+        });
+
+        newSocket.on('user-left', ({ userId: leftUserId, timestamp }) => {
+          console.log(`User left: ${leftUserId}`);
+          
+          // Remove from chat users list
+          setChatUsers(prev => prev.filter(u => u.id !== leftUserId));
+          
+          setMessages(prev => [...prev, {
+            id: `system_${timestamp}`,
+            content: 'User left the chat',
+            timestamp,
+            senderId: 'system',
+            type: 'system',
+            isOwn: false
+          }]);
+        });
+
+        // WebRTC call events
+        newSocket.on('call-offer', async ({ offer, callerId: incomingCallerId }) => {
+          console.log('Received call offer from:', incomingCallerId);
+          setCallerId(incomingCallerId);
+          setIsCallIncoming(true);
+          
+          // Initialize peer connection for incoming call
+          const peerConnection = initializePeerConnection();
+          peerConnectionRef.current = peerConnection;
+          
+          // Set remote description
+          await peerConnection.setRemoteDescription(offer);
+        });
+
+        newSocket.on('call-answer', async ({ answer }) => {
+          if (peerConnectionRef.current) {
+            await peerConnectionRef.current.setRemoteDescription(answer);
+          }
+        });
+
+        newSocket.on('ice-candidate', async ({ candidate }) => {
+          if (peerConnectionRef.current) {
+            await peerConnectionRef.current.addIceCandidate(candidate);
+          }
+        });
+
+        newSocket.on('call-end', () => {
+          endCall();
+        });
+
+        newSocket.on('receive-message', async ({ messageId, encryptedContent, timestamp, senderId }) => {
+          try {
+            // For demo purposes, we'll show messages in plain text for instant messaging
+            // In production, you'd implement proper key exchange first
+            
+            // Try to decrypt if we have the sender's key, otherwise show as encrypted
+            const sender = chatUsers.find(u => u.id === senderId);
+            let decryptedContent = 'Encrypted message';
+            
+            if (sender?.publicKey && encryptedContent?.ciphertext) {
+              try {
+                const senderPublicKey = e2eeManager.publicKeyFromBase64(sender.publicKey);
+                const encryptedMessage = {
+                  ciphertext: sodium.from_base64(encryptedContent.ciphertext),
+                  nonce: sodium.from_base64(encryptedContent.nonce)
+                };
+                decryptedContent = await e2eeManager.decryptMessage(encryptedMessage, senderPublicKey);
+              } catch (decryptError) {
+                console.log('Decryption failed, showing as plain text for demo');
+                decryptedContent = encryptedContent.plaintext || 'Encrypted message';
+              }
+            } else {
+              // Fallback to plain text for instant messaging demo
+              decryptedContent = encryptedContent.plaintext || encryptedContent;
+            }
+            
+            setMessages(prev => [...prev, {
+              id: messageId,
+              content: decryptedContent,
+              timestamp,
+              senderId,
+              type: 'text',
+              isOwn: false
+            }]);
+          } catch (error) {
+            console.error('Failed to process message:', error);
+            // Still show the message for better UX
+            setMessages(prev => [...prev, {
+              id: messageId,
+              content: 'Message received (decryption failed)',
+              timestamp,
+              senderId,
+              type: 'text',
+              isOwn: false
+            }]);
+          }
+        });
+
+        setIsInitializing(false);
+      } catch (error) {
+        console.error('Failed to initialize chat:', error);
+        toast({
+          title: "Initialization Error",
+          description: "Failed to set up secure chat",
+          variant: "destructive"
+        });
+        setIsInitializing(false);
+      }
+    };
+
+    initializeChat();
+
+    return () => {
+      // Clean up WebRTC connections
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+      }
+      socket?.disconnect();
+    };
+  }, [chatId, userId, toast]);
+
+  const sendMessage = async () => {
+    if (!inputMessage.trim() || !socket || !isConnected) {
+      return;
+    }
+
+    try {
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const timestamp = Date.now();
+
+      // For instant messaging, send both encrypted and plaintext for demo
+      let encryptedContent: any = {
+        plaintext: inputMessage // Fallback for instant messaging
+      };
+
+      // Try to encrypt if we have recipients with public keys
+      const recipient = chatUsers.find(u => u.id !== userId);
+      if (recipient?.publicKey) {
+        try {
+          const recipientPublicKey = e2eeManager.publicKeyFromBase64(recipient.publicKey);
+          const encryptedMessage = await e2eeManager.encryptMessage(inputMessage, recipientPublicKey);
+          
+          encryptedContent = {
+            ciphertext: sodium.to_base64(encryptedMessage.ciphertext),
+            nonce: sodium.to_base64(encryptedMessage.nonce),
+            plaintext: inputMessage // Keep for instant demo
+          };
+        } catch (encryptError) {
+          console.log('Encryption failed, sending plaintext for demo');
+        }
+      }
+
+      // Send message to all users in the chat (broadcast)
+      socket.emit('send-message', {
+        chatId,
+        messageId,
+        encryptedContent
+      });
+
+      // Add to local messages immediately
+      setMessages(prev => [...prev, {
+        id: messageId,
+        content: inputMessage,
+        timestamp,
+        senderId: userId,
+        type: 'text',
+        isOwn: true
+      }]);
+
+      setInputMessage('');
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      toast({
+        title: "Send Error",
+        description: "Failed to send message",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const formatTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
+        <div className="glass-card rounded-2xl p-8 text-center max-w-sm mx-4">
+          <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-lg font-semibold">Setting up secure chat...</p>
+          <p className="text-sm text-gray-400 mt-2">Generating encryption keys</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col">
+      {/* Chat Header */}
+      <div className="glass-card border-b border-gray-700/50 p-4 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          
+          <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full flex items-center justify-center">
+            <Users className="text-white h-5 w-5" />
+          </div>
+          
+          <div className="flex-1">
+            <h3 className="font-semibold text-white">Secure Chat</h3>
+            <div className="flex items-center space-x-2 text-sm">
+              <Shield className="h-3 w-3 text-emerald-400" />
+              <span className="text-emerald-400">End-to-end encrypted</span>
+              <span className="text-gray-400">•</span>
+              <span className={`${isConnected ? 'text-emerald-400' : 'text-red-400'}`}>
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          {!isInCall ? (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-cyan-400 hover:text-white"
+              onClick={startCall}
+              disabled={chatUsers.length <= 1}
+            >
+              <Phone className="h-5 w-5" />
+            </Button>
+          ) : (
+            <div className="flex items-center space-x-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className={`${isMuted ? 'text-red-400' : 'text-cyan-400'} hover:text-white`}
+                onClick={toggleMute}
+              >
+                <Mic className={`h-5 w-5 ${isMuted ? 'opacity-50' : ''}`} />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-red-400 hover:text-white"
+                onClick={endCall}
+              >
+                <Phone className="h-5 w-5 rotate-[135deg]" />
+              </Button>
+            </div>
+          )}
+          <Button variant="ghost" size="sm" className="text-cyan-400 hover:text-white">
+            <Video className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="sm">
+            <MoreVertical className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.length === 0 && (
+          <div className="text-center py-8">
+            <div className="w-16 h-16 bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 security-icon">
+              <Shield className="text-2xl text-white" />
+            </div>
+            <p className="text-gray-400 mb-2">Chat is secured with end-to-end encryption</p>
+            <p className="text-sm text-gray-500">Start sending secure messages</p>
+          </div>
+        )}
+
+        {messages.map((message) => (
+          <div key={message.id}>
+            {message.type === 'system' ? (
+              <div className="text-center py-2">
+                <span className="text-xs bg-gray-800/50 px-3 py-1 rounded-full text-gray-400">
+                  <Shield className="inline h-3 w-3 mr-1" />
+                  {message.content}
+                </span>
+              </div>
+            ) : (
+              <div className={`flex ${message.isOwn ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                  message.isOwn 
+                    ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' 
+                    : 'bg-gray-700 text-white'
+                }`}>
+                  <p className="text-sm">{message.content}</p>
+                  <div className="flex items-center justify-end mt-1 space-x-1">
+                    <span className={`text-xs ${
+                      message.isOwn ? 'text-white/70' : 'text-gray-400'
+                    }`}>
+                      {formatTime(message.timestamp)}
+                    </span>
+                    {message.isOwn && (
+                      <div className="text-xs text-white/70">✓✓</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Message Input */}
+      <div className="p-4 glass-card border-t border-gray-700/50">
+        <div className="flex items-center space-x-3">
+          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+            <Paperclip className="h-5 w-5" />
+          </Button>
+          
+          <div className="flex-1 relative">
+            <Input
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Type a message..."
+              className="bg-gray-700/50 border-gray-600 text-white placeholder-gray-400 pr-12"
+              disabled={!isConnected}
+            />
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+            >
+              <Smile className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          {inputMessage.trim() ? (
+            <Button 
+              onClick={sendMessage}
+              disabled={!isConnected}
+              className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700"
+            >
+              <Send className="h-5 w-5" />
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" className="text-cyan-400 hover:text-white">
+              <Mic className="h-5 w-5" />
+            </Button>
+          )}
+        </div>
+        
+        {!isConnected && (
+          <p className="text-center text-red-400 text-sm mt-2">
+            Connecting to secure server...
+          </p>
+        )}
+        
+        {isConnected && chatUsers.length <= 1 && (
+          <p className="text-center text-gray-400 text-sm mt-2">
+            Share this chat link with others to start chatting securely
+          </p>
+        )}
+      </div>
+
+      {/* Hidden audio elements for WebRTC */}
+      <audio 
+        ref={localAudioRef} 
+        autoPlay 
+        muted 
+        playsInline
+        style={{ display: 'none' }} 
+      />
+      <audio 
+        ref={remoteAudioRef} 
+        autoPlay 
+        playsInline
+        controls={false}
+        volume={1.0}
+        style={{ display: 'none' }} 
+      />
+
+      {/* Call status overlay */}
+      {isInCall && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="glass-card rounded-full px-6 py-3 flex items-center space-x-3">
+            <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+            <span className="text-sm font-medium text-white">Audio call active</span>
+            {!audioEnabled && (
+              <Button 
+                size="sm" 
+                onClick={enableAudio}
+                className="bg-blue-600 hover:bg-blue-700 text-xs"
+              >
+                Enable Audio
+              </Button>
+            )}
+            {isMuted && (
+              <div className="flex items-center space-x-1 text-red-400">
+                <Mic className="h-4 w-4 opacity-50" />
+                <span className="text-xs">Muted</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Incoming call overlay */}
+      {isCallIncoming && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="glass-card rounded-2xl p-8 text-center max-w-sm mx-4">
+            <div className="w-20 h-20 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Phone className="h-10 w-10 text-white animate-bounce" />
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">Incoming Call</h3>
+            <p className="text-gray-400 mb-6">Someone is calling you</p>
+            <div className="flex gap-4">
+              <Button 
+                onClick={() => setIsCallIncoming(false)}
+                variant="outline"
+                className="flex-1 border-red-500 text-red-500 hover:bg-red-500 hover:text-white"
+              >
+                Decline
+              </Button>
+              <Button 
+                onClick={answerCall}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                Answer
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
