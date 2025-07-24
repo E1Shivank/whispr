@@ -90,10 +90,16 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
       }
     };
     
-    // Critical fix: Ensure video tracks are properly handled for caller
+    // Critical fix: Ensure video tracks are properly handled for both caller and receiver
     peerConnection.ontrack = async (event) => {
-      console.log('🎥 RECEIVED TRACK:', event.track.kind, 'streams:', event.streams.length, 'from', event.track.label);
+      console.log('🎥 RECEIVED TRACK:', event.track.kind, 'streams:', event.streams.length, 'readyState:', event.track.readyState);
       const track = event.track;
+      
+      // Ensure track is live before processing
+      if (track.readyState === 'ended') {
+        console.log('🎥 Track ended, ignoring');
+        return;
+      }
       
       if (event.streams && event.streams.length > 0) {
         if (track.kind === 'audio' && remoteAudioRef.current) {
@@ -119,60 +125,74 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
             });
           }
         } else if (track.kind === 'video' && remoteVideoRef.current) {
-          console.log('🎥 SETTING REMOTE VIDEO STREAM for caller:', event.streams[0]);
+          console.log('🎥 PROCESSING VIDEO TRACK - Stream tracks:', event.streams[0].getTracks().length);
           const remoteStream = event.streams[0];
-          remoteVideoRef.current.srcObject = remoteStream;
           
-          // CRITICAL: Force video display for caller immediately
-          setHasRemoteVideo(true);
-          console.log('🎥 FORCED hasRemoteVideo to true for caller');
+          // Check if stream has active video tracks
+          const videoTracks = remoteStream.getVideoTracks();
+          console.log('🎥 Video tracks in stream:', videoTracks.length, 'enabled:', videoTracks.map(t => t.enabled));
           
-          // Add event listeners to track video state
-          const handleVideoReady = () => {
-            console.log('🎥 Remote video metadata loaded for caller');
-            setHasRemoteVideo(true);
-          };
-          
-          const handleVideoPlaying = () => {
-            console.log('🎥 Remote video is now playing for caller');
-            setHasRemoteVideo(true);
-          };
-          
-          remoteVideoRef.current.addEventListener('loadedmetadata', handleVideoReady);
-          remoteVideoRef.current.addEventListener('playing', handleVideoPlaying);
-          remoteVideoRef.current.addEventListener('canplay', handleVideoReady);
-          
-          try {
-            await remoteVideoRef.current.play();
-            console.log('Remote video started playing for caller');
-            setHasRemoteVideo(true);
+          if (videoTracks.length > 0) {
+            remoteVideoRef.current.srcObject = remoteStream;
             
-            toast({
-              title: "Video Connected", 
-              description: "You can now see the other person"
-            });
-          } catch (error) {
-            console.log('Video autoplay prevented for caller, forcing play:', error);
-            // Force video to show for caller
+            // CRITICAL: Force video display immediately
             setHasRemoteVideo(true);
+            console.log('🎥 FORCED hasRemoteVideo to true - should show video now');
             
-            // Try multiple approaches to get video working for caller
-            setTimeout(async () => {
-              if (remoteVideoRef.current) {
-                try {
-                  remoteVideoRef.current.muted = false;
-                  await remoteVideoRef.current.play();
-                  console.log('Remote video started playing for caller after timeout');
-                } catch (retryError) {
-                  console.log('Retry failed, but showing video anyway:', retryError);
+            // Add event listeners
+            const handleVideoReady = () => {
+              console.log('🎥 Remote video metadata loaded and ready');
+              setHasRemoteVideo(true);
+            };
+            
+            const handleVideoPlaying = () => {
+              console.log('🎥 Remote video is now playing successfully');
+              setHasRemoteVideo(true);
+            };
+            
+            remoteVideoRef.current.addEventListener('loadedmetadata', handleVideoReady);
+            remoteVideoRef.current.addEventListener('playing', handleVideoPlaying);
+            remoteVideoRef.current.addEventListener('canplay', handleVideoReady);
+          
+            try {
+              await remoteVideoRef.current.play();
+              console.log('🎥 Remote video playing successfully');
+              
+              toast({
+                title: "Video Connected", 
+                description: "You can now see the other person"
+              });
+            } catch (error) {
+              console.log('🎥 Video autoplay prevented, trying fallbacks:', error);
+              
+              // Multiple fallback attempts for video playback
+              setTimeout(async () => {
+                if (remoteVideoRef.current && remoteVideoRef.current.srcObject) {
+                  try {
+                    // Try unmuted first
+                    remoteVideoRef.current.muted = false;
+                    await remoteVideoRef.current.play();
+                    console.log('🎥 Video playing after unmute');
+                  } catch (retryError) {
+                    try {
+                      // Try muted as last resort
+                      remoteVideoRef.current.muted = true;
+                      await remoteVideoRef.current.play();
+                      console.log('🎥 Video playing muted');
+                    } catch (finalError) {
+                      console.log('🎥 All playback attempts failed:', finalError);
+                    }
+                  }
                 }
-              }
-            }, 1000);
-            
-            toast({
-              title: "Video Connecting",
-              description: "Video should appear shortly"
-            });
+              }, 500);
+              
+              toast({
+                title: "Video Connecting",
+                description: "Video should appear shortly"
+              });
+            }
+          } else {
+            console.log('🎥 No active video tracks in stream');
           }
         }
       }
@@ -340,25 +360,22 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
           }
         });
         
-        // Add new tracks
+        // Add new tracks for video call answer - CRITICAL FOR CALLER TO SEE VIDEO
         stream.getTracks().forEach(track => {
-          console.log('Adding local track for answer:', track.kind, 'enabled:', track.enabled);
-          const sender = peerConnectionRef.current!.addTrack(track, stream);
-          console.log('Answer track added with sender:', sender);
+          console.log('🎥 ADDING TRACK FOR ANSWER:', track.kind, 'enabled:', track.enabled, 'readyState:', track.readyState);
+          if (track.readyState === 'live') {
+            const sender = peerConnectionRef.current!.addTrack(track, stream);
+            console.log('🎥 Answer track added successfully with sender:', sender);
+          } else {
+            console.warn('🎥 Track not live, skipping:', track.readyState);
+          }
         });
 
-        // Create and send answer with proper options
-        const answerOptions = isVideoCall ? {
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: true
-        } : {
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: false
-        };
-        
-        const answer = await peerConnectionRef.current.createAnswer(answerOptions);
+        // Create and send answer - CRITICAL: Ensure video is sent back to caller
+        console.log('🎥 CREATING ANSWER for video call:', isVideoCall);
+        const answer = await peerConnectionRef.current.createAnswer();
         await peerConnectionRef.current.setLocalDescription(answer);
-        console.log('Created answer with video:', isVideoCall);
+        console.log('🎥 Local description set for answer, tracks being sent to caller:', stream.getTracks().length);
 
         socket?.emit('call-answer', {
           chatId,
@@ -549,7 +566,7 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
 
         // WebRTC call events
         newSocket.on('call-offer', async ({ offer, callerId: incomingCallerId, isVideo }) => {
-          console.log('Received call offer from:', incomingCallerId, 'isVideo:', isVideo);
+          console.log('🎥 RECEIVED CALL OFFER from:', incomingCallerId, 'isVideo:', isVideo);
           setCallerId(incomingCallerId);
           setIsCallIncoming(true);
           setIsVideoCall(isVideo || false);
@@ -558,8 +575,13 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
           const peerConnection = initializePeerConnection();
           peerConnectionRef.current = peerConnection;
           
-          // Set remote description
-          await peerConnection.setRemoteDescription(offer);
+          try {
+            // Set remote description
+            await peerConnection.setRemoteDescription(offer);
+            console.log('🎥 Remote description set for incoming call offer');
+          } catch (error) {
+            console.error('🎥 Error setting remote description for offer:', error);
+          }
         });
 
         newSocket.on('call-answer', async ({ answer }) => {
