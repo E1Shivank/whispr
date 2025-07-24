@@ -120,6 +120,23 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
         } else if (track.kind === 'video' && remoteVideoRef.current) {
           console.log('Setting remote video stream:', event.streams[0]);
           remoteVideoRef.current.srcObject = event.streams[0];
+          
+          // Add event listeners to track video state
+          const handleVideoReady = () => {
+            console.log('Remote video metadata loaded');
+            setHasRemoteVideo(true);
+          };
+          
+          const handleVideoPlaying = () => {
+            console.log('Remote video is now playing');
+            setHasRemoteVideo(true);
+          };
+          
+          remoteVideoRef.current.addEventListener('loadedmetadata', handleVideoReady);
+          remoteVideoRef.current.addEventListener('playing', handleVideoPlaying);
+          remoteVideoRef.current.addEventListener('canplay', handleVideoReady);
+          
+          // Force video to show immediately
           setHasRemoteVideo(true);
           
           try {
@@ -131,11 +148,25 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
               description: "Video call is now active"
             });
           } catch (error) {
-            console.log('Video autoplay prevented:', error);
-            toast({
-              title: "Video Ready",
-              description: "Video stream received, click to enable if needed"
-            });
+            console.log('Video autoplay prevented, trying alternatives:', error);
+            // Try muted autoplay
+            remoteVideoRef.current.muted = true;
+            try {
+              await remoteVideoRef.current.play();
+              console.log('Remote video started playing muted');
+              // Show toast to unmute if needed
+              toast({
+                title: "Video Connected (Muted)",
+                description: "Video is playing but muted due to browser policy"
+              });
+            } catch (retryError) {
+              console.log('Video play completely failed:', retryError);
+              toast({
+                title: "Video Issue",
+                description: "Video received but may need manual interaction to play",
+                variant: "destructive"
+              });
+            }
           }
         }
       }
@@ -259,6 +290,15 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
 
       // Add local stream to existing peer connection
       if (peerConnectionRef.current) {
+        // Remove existing tracks first to avoid conflicts
+        const senders = peerConnectionRef.current.getSenders();
+        senders.forEach(sender => {
+          if (sender.track) {
+            peerConnectionRef.current!.removeTrack(sender);
+          }
+        });
+        
+        // Add new tracks
         stream.getTracks().forEach(track => {
           console.log('Adding local track for answer:', track.kind);
           peerConnectionRef.current!.addTrack(track, stream);
@@ -878,16 +918,22 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
               ref={remoteVideoRef}
               autoPlay
               playsInline
-              className="w-full h-full object-cover bg-gray-900"
+              className="w-full h-full object-cover bg-gray-900 cursor-pointer"
               style={{ 
                 objectFit: 'cover',
                 minHeight: '100%',
                 minWidth: '100%'
               }}
+              onClick={() => {
+                // Manual video enable on click if autoplay failed
+                if (remoteVideoRef.current && remoteVideoRef.current.paused) {
+                  remoteVideoRef.current.play().catch(console.error);
+                }
+              }}
             />
             
             {/* Waiting for remote video indicator */}
-            {!remoteVideoRef.current?.srcObject && (
+            {!hasRemoteVideo && (
               <div className="absolute inset-0 bg-gray-900/80 flex items-center justify-center">
                 <div className="text-center px-4">
                   <Video className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-4" />
