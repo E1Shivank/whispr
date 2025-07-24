@@ -90,8 +90,9 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
       }
     };
     
+    // Critical fix: Ensure video tracks are properly handled for caller
     peerConnection.ontrack = async (event) => {
-      console.log('Received remote track:', event.track.kind, 'streams:', event.streams.length);
+      console.log('🎥 RECEIVED TRACK:', event.track.kind, 'streams:', event.streams.length, 'from', event.track.label);
       const track = event.track;
       
       if (event.streams && event.streams.length > 0) {
@@ -118,17 +119,22 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
             });
           }
         } else if (track.kind === 'video' && remoteVideoRef.current) {
-          console.log('Setting remote video stream:', event.streams[0]);
-          remoteVideoRef.current.srcObject = event.streams[0];
+          console.log('🎥 SETTING REMOTE VIDEO STREAM for caller:', event.streams[0]);
+          const remoteStream = event.streams[0];
+          remoteVideoRef.current.srcObject = remoteStream;
+          
+          // CRITICAL: Force video display for caller immediately
+          setHasRemoteVideo(true);
+          console.log('🎥 FORCED hasRemoteVideo to true for caller');
           
           // Add event listeners to track video state
           const handleVideoReady = () => {
-            console.log('Remote video metadata loaded');
+            console.log('🎥 Remote video metadata loaded for caller');
             setHasRemoteVideo(true);
           };
           
           const handleVideoPlaying = () => {
-            console.log('Remote video is now playing');
+            console.log('🎥 Remote video is now playing for caller');
             setHasRemoteVideo(true);
           };
           
@@ -136,37 +142,37 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
           remoteVideoRef.current.addEventListener('playing', handleVideoPlaying);
           remoteVideoRef.current.addEventListener('canplay', handleVideoReady);
           
-          // Force video to show immediately when we receive the stream
-          setTimeout(() => setHasRemoteVideo(true), 100);
-          
           try {
             await remoteVideoRef.current.play();
-            console.log('Remote video started playing');
+            console.log('Remote video started playing for caller');
+            setHasRemoteVideo(true);
             
             toast({
               title: "Video Connected", 
-              description: "Video call is now active"
+              description: "You can now see the other person"
             });
           } catch (error) {
-            console.log('Video autoplay prevented, trying alternatives:', error);
-            // Try muted autoplay
-            remoteVideoRef.current.muted = true;
-            try {
-              await remoteVideoRef.current.play();
-              console.log('Remote video started playing muted');
-              // Show toast to unmute if needed
-              toast({
-                title: "Video Connected (Muted)",
-                description: "Video is playing but muted due to browser policy"
-              });
-            } catch (retryError) {
-              console.log('Video play completely failed:', retryError);
-              toast({
-                title: "Video Issue",
-                description: "Video received but may need manual interaction to play",
-                variant: "destructive"
-              });
-            }
+            console.log('Video autoplay prevented for caller, forcing play:', error);
+            // Force video to show for caller
+            setHasRemoteVideo(true);
+            
+            // Try multiple approaches to get video working for caller
+            setTimeout(async () => {
+              if (remoteVideoRef.current) {
+                try {
+                  remoteVideoRef.current.muted = false;
+                  await remoteVideoRef.current.play();
+                  console.log('Remote video started playing for caller after timeout');
+                } catch (retryError) {
+                  console.log('Retry failed, but showing video anyway:', retryError);
+                }
+              }
+            }, 1000);
+            
+            toast({
+              title: "Video Connecting",
+              description: "Video should appear shortly"
+            });
           }
         }
       }
@@ -557,8 +563,14 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
         });
 
         newSocket.on('call-answer', async ({ answer }) => {
+          console.log('Received call answer from remote peer');
           if (peerConnectionRef.current) {
-            await peerConnectionRef.current.setRemoteDescription(answer);
+            try {
+              await peerConnectionRef.current.setRemoteDescription(answer);
+              console.log('Remote description set successfully for answer - caller should now receive video');
+            } catch (error) {
+              console.error('Error setting remote description for answer:', error);
+            }
           }
         });
 
@@ -998,11 +1010,26 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
             
             {/* Waiting for remote video indicator */}
             {!hasRemoteVideo && (
-              <div className="absolute inset-0 bg-gray-900/80 flex items-center justify-center">
+              <div 
+                className="absolute inset-0 bg-gray-900/80 flex items-center justify-center cursor-pointer"
+                onClick={() => {
+                  // Manual trigger for video activation
+                  console.log('🎥 Manual video activation clicked');
+                  if (remoteVideoRef.current && remoteVideoRef.current.srcObject) {
+                    console.log('🎥 Trying to manually activate remote video');
+                    remoteVideoRef.current.play().then(() => {
+                      setHasRemoteVideo(true);
+                      console.log('🎥 Manual video activation successful');
+                    }).catch(e => console.log('🎥 Manual activation failed:', e));
+                  } else {
+                    console.log('🎥 No remote video stream available yet');
+                  }
+                }}
+              >
                 <div className="text-center px-4">
                   <Video className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-white text-base sm:text-lg">Waiting for video...</p>
-                  <p className="text-gray-400 text-xs sm:text-sm mt-2">Make sure the other person has their camera enabled</p>
+                  <p className="text-white text-base sm:text-lg">Connecting video...</p>
+                  <p className="text-blue-400 text-xs sm:text-sm mt-2 underline">Click here if video doesn't appear</p>
                 </div>
               </div>
             )}
