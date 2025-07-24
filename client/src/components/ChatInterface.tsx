@@ -209,16 +209,20 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
       if (withVideo && localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.muted = true; // Mute local video audio to prevent echo
+        localVideoRef.current.playsInline = true; // Important for mobile devices
         setIsVideoCall(true);
         setIsVideoEnabled(true);
-        console.log('Local video stream set for initiator');
+        console.log('Local video stream set for initiator, tracks:', stream.getVideoTracks().length);
         
-        // Ensure local video plays
+        // Ensure local video plays immediately
         try {
           await localVideoRef.current.play();
-          console.log('Local video playing successfully');
+          console.log('Local video playing successfully for initiator');
         } catch (error) {
-          console.log('Local video autoplay issue:', error);
+          console.log('Local video autoplay issue for initiator:', error);
+          // Try to play without autoplay restrictions
+          localVideoRef.current.muted = true;
+          localVideoRef.current.play().catch(e => console.log('Retry failed:', e));
         }
       }
 
@@ -302,15 +306,19 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
       if (isVideoCall && localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.muted = true;
+        localVideoRef.current.playsInline = true; // Important for mobile devices
         setIsVideoEnabled(true);
-        console.log('Local video stream set for answerer');
+        console.log('Local video stream set for answerer, tracks:', stream.getVideoTracks().length);
         
-        // Ensure local video plays
+        // Ensure local video plays immediately
         try {
           await localVideoRef.current.play();
           console.log('Local video playing successfully for answerer');
         } catch (error) {
           console.log('Local video autoplay issue for answerer:', error);
+          // Try to play without autoplay restrictions
+          localVideoRef.current.muted = true;
+          localVideoRef.current.play().catch(e => console.log('Retry failed:', e));
         }
       }
 
@@ -962,6 +970,17 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
                 minHeight: '100%',
                 minWidth: '100%'
               }}
+              onLoadedMetadata={() => {
+                console.log('Remote video metadata loaded');
+                setHasRemoteVideo(true);
+                if (remoteVideoRef.current) {
+                  remoteVideoRef.current.play().catch(console.error);
+                }
+              }}
+              onCanPlay={() => {
+                console.log('Remote video can play');
+                setHasRemoteVideo(true);
+              }}
               onClick={() => {
                 // Manual video enable on click if autoplay failed
                 if (remoteVideoRef.current && remoteVideoRef.current.paused) {
@@ -969,6 +988,13 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
                 }
               }}
             />
+            
+            {/* Debug info overlay */}
+            <div className="absolute top-12 left-4 bg-black/50 text-white text-xs p-2 rounded">
+              Remote: {hasRemoteVideo ? 'Connected' : 'Waiting'}
+              <br />
+              Local Enabled: {isVideoEnabled ? 'Yes' : 'No'}
+            </div>
             
             {/* Waiting for remote video indicator */}
             {!hasRemoteVideo && (
@@ -990,12 +1016,25 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
                 playsInline
                 className="w-full h-full object-cover"
                 style={{ objectFit: 'cover' }}
+                onLoadedMetadata={() => {
+                  console.log('Local video metadata loaded');
+                  if (localVideoRef.current) {
+                    localVideoRef.current.play().catch(console.error);
+                  }
+                }}
+                onCanPlay={() => {
+                  console.log('Local video can play');
+                }}
               />
               {!isVideoEnabled && (
                 <div className="absolute inset-0 bg-gray-900/90 flex items-center justify-center">
                   <Video className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 opacity-50" />
                 </div>
               )}
+              {/* Debug info overlay */}
+              <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1">
+                Local: {isVideoEnabled ? 'On' : 'Off'}
+              </div>
             </div>
           </div>
 
