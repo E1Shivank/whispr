@@ -854,89 +854,97 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
 
       {/* Video call overlay */}
       {isInCall && isVideoCall && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-40 flex flex-col">
+        <div className="fixed inset-0 bg-black z-40 flex flex-col">
           {/* Video call header */}
-          <div className="p-4 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-white font-medium">Video Call</span>
+          <div className="safe-area-top p-3 sm:p-4 flex items-center justify-between bg-black/20 backdrop-blur-sm">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-white font-medium text-sm sm:text-base">Video Call</span>
             </div>
             <Button 
               variant="ghost" 
               size="sm" 
-              className="text-white hover:text-red-400"
+              className="text-white hover:text-red-400 p-2"
               onClick={endCall}
             >
-              <Phone className="h-5 w-5 rotate-[135deg]" />
+              <Phone className="h-4 w-4 sm:h-5 sm:w-5 rotate-[135deg]" />
             </Button>
           </div>
 
-          {/* Main video area */}
-          <div className="flex-1 relative">
-            {/* Remote video (main) */}
+          {/* Main video area - responsive */}
+          <div className="flex-1 relative overflow-hidden">
+            {/* Remote video (main) - full screen with proper aspect ratio */}
             <video 
               ref={remoteVideoRef}
               autoPlay
               playsInline
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover bg-gray-900"
+              style={{ 
+                objectFit: 'cover',
+                minHeight: '100%',
+                minWidth: '100%'
+              }}
             />
             
             {/* Waiting for remote video indicator */}
-            {!hasRemoteVideo && (
-              <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center">
-                <div className="text-center">
-                  <Video className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-white text-lg">Waiting for video...</p>
-                  <p className="text-gray-400 text-sm mt-2">Make sure the other person has their camera enabled</p>
+            {!remoteVideoRef.current?.srcObject && (
+              <div className="absolute inset-0 bg-gray-900/80 flex items-center justify-center">
+                <div className="text-center px-4">
+                  <Video className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-white text-base sm:text-lg">Waiting for video...</p>
+                  <p className="text-gray-400 text-xs sm:text-sm mt-2">Make sure the other person has their camera enabled</p>
                 </div>
               </div>
             )}
             
-            {/* Local video (picture-in-picture) */}
-            <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden border-2 border-white/20">
+            {/* Local video (picture-in-picture) - responsive sizing */}
+            <div className="absolute top-3 right-3 sm:top-4 sm:right-4 w-24 h-32 sm:w-32 sm:h-44 md:w-48 md:h-36 bg-gray-800 rounded-lg overflow-hidden border-2 border-white/30 shadow-lg">
               <video 
                 ref={localVideoRef}
                 autoPlay
                 muted
                 playsInline
                 className="w-full h-full object-cover"
+                style={{ objectFit: 'cover' }}
               />
               {!isVideoEnabled && (
-                <div className="absolute inset-0 bg-gray-900/80 flex items-center justify-center">
-                  <Video className="h-8 w-8 text-gray-400 opacity-50" />
+                <div className="absolute inset-0 bg-gray-900/90 flex items-center justify-center">
+                  <Video className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 opacity-50" />
                 </div>
               )}
             </div>
           </div>
 
-          {/* Video call controls */}
-          <div className="p-6 flex justify-center space-x-6">
-            <Button 
-              variant="ghost" 
-              size="lg" 
-              className={`w-14 h-14 rounded-full ${isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'}`}
-              onClick={toggleMute}
-            >
-              <Mic className={`h-6 w-6 text-white ${isMuted ? 'opacity-50' : ''}`} />
-            </Button>
-            
-            <Button 
-              variant="ghost" 
-              size="lg" 
-              className={`w-14 h-14 rounded-full ${!isVideoEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'}`}
-              onClick={toggleVideo}
-            >
-              <Video className={`h-6 w-6 text-white ${!isVideoEnabled ? 'opacity-50' : ''}`} />
-            </Button>
-            
-            <Button 
-              variant="ghost" 
-              size="lg" 
-              className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700"
-              onClick={endCall}
-            >
-              <Phone className="h-6 w-6 text-white rotate-[135deg]" />
-            </Button>
+          {/* Video call controls - responsive and touch-friendly */}
+          <div className="safe-area-bottom p-4 sm:p-6 bg-black/20 backdrop-blur-sm">
+            <div className="flex justify-center items-center space-x-4 sm:space-x-6 max-w-sm mx-auto">
+              <Button 
+                variant="ghost" 
+                size="lg" 
+                className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full touch-manipulation ${isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700/80 hover:bg-gray-600'}`}
+                onClick={toggleMute}
+              >
+                <Mic className={`h-5 w-5 sm:h-6 sm:w-6 text-white ${isMuted ? 'opacity-50' : ''}`} />
+              </Button>
+              
+              <Button 
+                variant="ghost" 
+                size="lg" 
+                className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full touch-manipulation ${!isVideoEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700/80 hover:bg-gray-600'}`}
+                onClick={toggleVideo}
+              >
+                <Video className={`h-5 w-5 sm:h-6 sm:w-6 text-white ${!isVideoEnabled ? 'opacity-50' : ''}`} />
+              </Button>
+              
+              <Button 
+                variant="ghost" 
+                size="lg" 
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-red-600 hover:bg-red-700 touch-manipulation"
+                onClick={endCall}
+              >
+                <Phone className="h-5 w-5 sm:h-6 sm:w-6 text-white rotate-[135deg]" />
+              </Button>
+            </div>
           </div>
         </div>
       )}

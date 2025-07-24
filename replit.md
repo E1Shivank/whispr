@@ -21,6 +21,8 @@ Preferred communication style: Simple, everyday language.
 ✓ Implemented video call overlay with picture-in-picture local video
 ✓ Added camera and microphone controls for video calls
 ✓ Enhanced signaling server to support both audio and video calls
+✓ Made video call interface fully responsive for mobile and desktop devices
+✓ Added safe area handling for iOS devices and touch-friendly controls
 
 ## System Architecture
 

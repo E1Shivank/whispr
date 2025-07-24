@@ -2,6 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Safe area handling for mobile devices */
+.safe-area-top {
+  padding-top: max(env(safe-area-inset-top), 1rem);
+}
+
+.safe-area-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 1rem);
+}
+
+/* Ensure touch-friendly buttons */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 :root {
   --background: hsl(0, 0%, 100%);
   --foreground: hsl(20, 14.3%, 4.1%);
