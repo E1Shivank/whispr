@@ -91,10 +91,10 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
     };
     
     peerConnection.ontrack = async (event) => {
-      console.log('Received remote track:', event.track.kind, event.streams[0]);
+      console.log('Received remote track:', event.track.kind, 'streams:', event.streams.length);
       const track = event.track;
       
-      if (event.streams[0]) {
+      if (event.streams && event.streams.length > 0) {
         if (track.kind === 'audio' && remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = event.streams[0];
           remoteAudioRef.current.volume = 1.0;
@@ -136,8 +136,8 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
           remoteVideoRef.current.addEventListener('playing', handleVideoPlaying);
           remoteVideoRef.current.addEventListener('canplay', handleVideoReady);
           
-          // Force video to show immediately
-          setHasRemoteVideo(true);
+          // Force video to show immediately when we receive the stream
+          setTimeout(() => setHasRemoteVideo(true), 100);
           
           try {
             await remoteVideoRef.current.play();
@@ -211,6 +211,15 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
         localVideoRef.current.muted = true; // Mute local video audio to prevent echo
         setIsVideoCall(true);
         setIsVideoEnabled(true);
+        console.log('Local video stream set for initiator');
+        
+        // Ensure local video plays
+        try {
+          await localVideoRef.current.play();
+          console.log('Local video playing successfully');
+        } catch (error) {
+          console.log('Local video autoplay issue:', error);
+        }
       }
 
       console.log('Microphone access granted, starting call');
@@ -220,13 +229,23 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
 
       // Add local stream to peer connection
       stream.getTracks().forEach(track => {
-        console.log('Adding local track:', track.kind);
-        peerConnection.addTrack(track, stream);
+        console.log('Adding local track:', track.kind, 'enabled:', track.enabled);
+        const sender = peerConnection.addTrack(track, stream);
+        console.log('Track added with sender:', sender);
       });
 
-      // Create offer
-      const offer = await peerConnection.createOffer();
+      // Create offer with proper options for video calls
+      const offerOptions = withVideo ? {
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      } : {
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false
+      };
+      
+      const offer = await peerConnection.createOffer(offerOptions);
       await peerConnection.setLocalDescription(offer);
+      console.log('Created offer with video:', withVideo);
 
       // Send call offer to other users
       socket?.emit('call-offer', {
@@ -284,6 +303,15 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.muted = true;
         setIsVideoEnabled(true);
+        console.log('Local video stream set for answerer');
+        
+        // Ensure local video plays
+        try {
+          await localVideoRef.current.play();
+          console.log('Local video playing successfully for answerer');
+        } catch (error) {
+          console.log('Local video autoplay issue for answerer:', error);
+        }
       }
 
       console.log('Microphone access granted for answering call');
@@ -300,13 +328,23 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
         
         // Add new tracks
         stream.getTracks().forEach(track => {
-          console.log('Adding local track for answer:', track.kind);
-          peerConnectionRef.current!.addTrack(track, stream);
+          console.log('Adding local track for answer:', track.kind, 'enabled:', track.enabled);
+          const sender = peerConnectionRef.current!.addTrack(track, stream);
+          console.log('Answer track added with sender:', sender);
         });
 
-        // Create and send answer
-        const answer = await peerConnectionRef.current.createAnswer();
+        // Create and send answer with proper options
+        const answerOptions = isVideoCall ? {
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true
+        } : {
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: false
+        };
+        
+        const answer = await peerConnectionRef.current.createAnswer(answerOptions);
         await peerConnectionRef.current.setLocalDescription(answer);
+        console.log('Created answer with video:', isVideoCall);
 
         socket?.emit('call-answer', {
           chatId,
