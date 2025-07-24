@@ -49,14 +49,18 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   
-  // Audio call states
+  // Audio/Video call states
   const [isInCall, setIsInCall] = useState(false);
+  const [isVideoCall, setIsVideoCall] = useState(false);
   const [isCallIncoming, setIsCallIncoming] = useState(false);
   const [callerId, setCallerId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const localAudioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
 
@@ -87,28 +91,45 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
     
     peerConnection.ontrack = async (event) => {
       console.log('Received remote track:', event.streams[0]);
-      if (remoteAudioRef.current && event.streams[0]) {
-        remoteAudioRef.current.srcObject = event.streams[0];
-        remoteAudioRef.current.volume = 1.0;
-        
-        try {
-          // Ensure audio plays (modern browsers require user interaction)
-          await remoteAudioRef.current.play();
-          setAudioEnabled(true);
-          console.log('Remote audio started playing automatically');
+      const track = event.track;
+      
+      if (event.streams[0]) {
+        if (track.kind === 'audio' && remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = event.streams[0];
+          remoteAudioRef.current.volume = 1.0;
           
-          toast({
-            title: "Audio Connected",
-            description: "You should now hear the other person"
-          });
-        } catch (error) {
-          console.log('Audio autoplay prevented, user needs to enable:', error);
-          setAudioEnabled(false);
-          toast({
-            title: "Audio Blocked",
-            description: "Click 'Enable Audio' to hear the call",
-            variant: "destructive"
-          });
+          try {
+            await remoteAudioRef.current.play();
+            setAudioEnabled(true);
+            console.log('Remote audio started playing automatically');
+            
+            toast({
+              title: "Audio Connected",
+              description: "You should now hear the other person"
+            });
+          } catch (error) {
+            console.log('Audio autoplay prevented, user needs to enable:', error);
+            setAudioEnabled(false);
+            toast({
+              title: "Audio Blocked",
+              description: "Click 'Enable Audio' to hear the call",
+              variant: "destructive"
+            });
+          }
+        } else if (track.kind === 'video' && remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+          
+          try {
+            await remoteVideoRef.current.play();
+            console.log('Remote video started playing');
+            
+            toast({
+              title: "Video Connected",
+              description: "Video call is now active"
+            });
+          } catch (error) {
+            console.log('Video autoplay prevented:', error);
+          }
         }
       }
     };
@@ -117,7 +138,7 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
   };
 
   // Start audio call
-  const startCall = async () => {
+  const startCall = async (withVideo = false) => {
     if (chatUsers.length <= 1) {
       toast({
         title: "No Users Available",
@@ -133,13 +154,25 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
-        } 
+        },
+        video: withVideo ? {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        } : false
       });
       localStreamRef.current = stream;
       
       if (localAudioRef.current) {
         localAudioRef.current.srcObject = stream;
         localAudioRef.current.muted = true; // Mute local audio to prevent echo
+      }
+      
+      if (withVideo && localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.muted = true; // Mute local video audio to prevent echo
+        setIsVideoCall(true);
+        setIsVideoEnabled(true);
       }
 
       console.log('Microphone access granted, starting call');
@@ -160,7 +193,8 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
       socket?.emit('call-offer', {
         chatId,
         offer,
-        callerId: userId
+        callerId: userId,
+        isVideo: withVideo
       });
 
       setIsInCall(true);
@@ -173,7 +207,7 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
       
       toast({
         title: "Calling...",
-        description: "Initiating audio call"
+        description: withVideo ? "Initiating video call" : "Initiating audio call"
       });
     } catch (error) {
       console.error('Failed to start call:', error);
@@ -193,13 +227,24 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
-        } 
+        },
+        video: isVideoCall ? {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        } : false
       });
       localStreamRef.current = stream;
       
       if (localAudioRef.current) {
         localAudioRef.current.srcObject = stream;
         localAudioRef.current.muted = true;
+      }
+      
+      if (isVideoCall && localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.muted = true;
+        setIsVideoEnabled(true);
       }
 
       console.log('Microphone access granted for answering call');
@@ -232,7 +277,7 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
       
       toast({
         title: "Call Connected",
-        description: "Audio call active"
+        description: isVideoCall ? "Video call active" : "Audio call active"
       });
     } catch (error) {
       console.error('Failed to answer call:', error);
@@ -258,16 +303,18 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
     }
 
     setIsInCall(false);
+    setIsVideoCall(false);
     setIsCallIncoming(false);
     setCallerId(null);
     setIsMuted(false);
+    setIsVideoEnabled(false);
     setAudioEnabled(false);
 
     socket?.emit('call-end', { chatId });
 
     toast({
       title: "Call Ended",
-      description: "Audio call disconnected"
+      description: isVideoCall ? "Video call disconnected" : "Audio call disconnected"
     });
   };
 
@@ -305,6 +352,17 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsMuted(!audioTrack.enabled);
+      }
+    }
+  };
+
+  // Toggle video
+  const toggleVideo = () => {
+    if (localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsVideoEnabled(videoTrack.enabled);
       }
     }
   };
@@ -388,10 +446,11 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
         });
 
         // WebRTC call events
-        newSocket.on('call-offer', async ({ offer, callerId: incomingCallerId }) => {
-          console.log('Received call offer from:', incomingCallerId);
+        newSocket.on('call-offer', async ({ offer, callerId: incomingCallerId, isVideo }) => {
+          console.log('Received call offer from:', incomingCallerId, 'isVideo:', isVideo);
           setCallerId(incomingCallerId);
           setIsCallIncoming(true);
+          setIsVideoCall(isVideo || false);
           
           // Initialize peer connection for incoming call
           const peerConnection = initializePeerConnection();
@@ -610,7 +669,10 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
               variant="ghost" 
               size="sm" 
               className="text-cyan-400 hover:text-white"
-              onClick={startCall}
+              onClick={(e) => {
+                e.preventDefault();
+                startCall();
+              }}
               disabled={chatUsers.length <= 1}
             >
               <Phone className="h-5 w-5" />
@@ -625,6 +687,16 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
               >
                 <Mic className={`h-5 w-5 ${isMuted ? 'opacity-50' : ''}`} />
               </Button>
+              {isVideoCall && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={`${!isVideoEnabled ? 'text-red-400' : 'text-cyan-400'} hover:text-white`}
+                  onClick={toggleVideo}
+                >
+                  <Video className={`h-5 w-5 ${!isVideoEnabled ? 'opacity-50' : ''}`} />
+                </Button>
+              )}
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -635,7 +707,16 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
               </Button>
             </div>
           )}
-          <Button variant="ghost" size="sm" className="text-cyan-400 hover:text-white">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-cyan-400 hover:text-white"
+            onClick={(e) => {
+              e.preventDefault();
+              startCall(true);
+            }}
+            disabled={chatUsers.length <= 1}
+          >
             <Video className="h-5 w-5" />
           </Button>
           <Button variant="ghost" size="sm">
@@ -758,12 +839,98 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
         autoPlay 
         playsInline
         controls={false}
-        volume={1.0}
         style={{ display: 'none' }} 
       />
 
-      {/* Call status overlay */}
-      {isInCall && (
+      {/* Video call overlay */}
+      {isInCall && isVideoCall && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-40 flex flex-col">
+          {/* Video call header */}
+          <div className="p-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-white font-medium">Video Call</span>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-white hover:text-red-400"
+              onClick={endCall}
+            >
+              <Phone className="h-5 w-5 rotate-[135deg]" />
+            </Button>
+          </div>
+
+          {/* Main video area */}
+          <div className="flex-1 relative">
+            {/* Remote video (main) */}
+            <video 
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            
+            {/* Waiting for remote video indicator */}
+            <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center" 
+                 style={{ display: remoteVideoRef.current?.srcObject ? 'none' : 'flex' }}>
+              <div className="text-center">
+                <Video className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-white text-lg">Waiting for video...</p>
+              </div>
+            </div>
+            
+            {/* Local video (picture-in-picture) */}
+            <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden border-2 border-white/20">
+              <video 
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+              {!isVideoEnabled && (
+                <div className="absolute inset-0 bg-gray-900/80 flex items-center justify-center">
+                  <Video className="h-8 w-8 text-gray-400 opacity-50" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Video call controls */}
+          <div className="p-6 flex justify-center space-x-6">
+            <Button 
+              variant="ghost" 
+              size="lg" 
+              className={`w-14 h-14 rounded-full ${isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+              onClick={toggleMute}
+            >
+              <Mic className={`h-6 w-6 text-white ${isMuted ? 'opacity-50' : ''}`} />
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              size="lg" 
+              className={`w-14 h-14 rounded-full ${!isVideoEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+              onClick={toggleVideo}
+            >
+              <Video className={`h-6 w-6 text-white ${!isVideoEnabled ? 'opacity-50' : ''}`} />
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              size="lg" 
+              className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700"
+              onClick={endCall}
+            >
+              <Phone className="h-6 w-6 text-white rotate-[135deg]" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Call status overlay (audio only) */}
+      {isInCall && !isVideoCall && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
           <div className="glass-card rounded-full px-6 py-3 flex items-center space-x-3">
             <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
@@ -794,7 +961,9 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
             <div className="w-20 h-20 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
               <Phone className="h-10 w-10 text-white animate-bounce" />
             </div>
-            <h3 className="text-xl font-semibold text-white mb-2">Incoming Call</h3>
+            <h3 className="text-xl font-semibold text-white mb-2">
+              Incoming {isVideoCall ? 'Video' : 'Audio'} Call
+            </h3>
             <p className="text-gray-400 mb-6">Someone is calling you</p>
             <div className="flex gap-4">
               <Button 

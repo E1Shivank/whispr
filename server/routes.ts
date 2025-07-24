@@ -152,12 +152,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     // Handle WebRTC signaling for voice/video calls
-    socket.on("call-offer", ({ chatId, offer, callerId }) => {
+    socket.on("call-offer", ({ chatId, offer, callerId, isVideo }) => {
       socket.to(chatId).emit("call-offer", {
         offer,
-        callerId
+        callerId,
+        isVideo
       });
-      console.log(`Call offer from ${callerId} in chat ${chatId}`);
+      console.log(`${isVideo ? 'Video' : 'Audio'} call offer from ${callerId} in chat ${chatId}`);
     });
 
     socket.on("call-answer", ({ chatId, answer, callerId }) => {
