@@ -8,7 +8,7 @@ SecureChat is a fully functional, WhatsApp-style secure chat application with re
 
 Preferred communication style: Simple, everyday language.
 
-## Recent Changes (January 23, 2025)
+## Recent Changes (January 24, 2025)
 
 ✓ Implemented full WhatsApp-style chat interface with real-time messaging
 ✓ Added end-to-end encryption using libsodium cryptography library  
@@ -17,6 +17,10 @@ Preferred communication style: Simple, everyday language.
 ✓ Added PWA capabilities with service worker and app manifest
 ✓ Implemented secure key generation and storage for E2EE
 ✓ Built ephemeral server architecture with no persistent message storage
+✓ Added full video calling functionality with WebRTC
+✓ Implemented video call overlay with picture-in-picture local video
+✓ Added camera and microphone controls for video calls
+✓ Enhanced signaling server to support both audio and video calls
 
 ## System Architecture
 
@@ -38,6 +42,8 @@ The application follows a modern full-stack architecture with clear separation b
 - **Database Provider**: Neon Database (serverless PostgreSQL)
 - **Session Management**: PostgreSQL-based session storage
 - **API Design**: RESTful endpoints with JSON communication
+- **Real-time Communication**: Socket.IO for WebSocket connections
+- **WebRTC Signaling**: Peer-to-peer connection establishment for video calls
 
 ## Key Components
 

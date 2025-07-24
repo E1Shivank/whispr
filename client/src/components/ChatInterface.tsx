@@ -57,6 +57,7 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
   const localAudioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -90,7 +91,7 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
     };
     
     peerConnection.ontrack = async (event) => {
-      console.log('Received remote track:', event.streams[0]);
+      console.log('Received remote track:', event.track.kind, event.streams[0]);
       const track = event.track;
       
       if (event.streams[0]) {
@@ -117,18 +118,24 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
             });
           }
         } else if (track.kind === 'video' && remoteVideoRef.current) {
+          console.log('Setting remote video stream:', event.streams[0]);
           remoteVideoRef.current.srcObject = event.streams[0];
+          setHasRemoteVideo(true);
           
           try {
             await remoteVideoRef.current.play();
             console.log('Remote video started playing');
             
             toast({
-              title: "Video Connected",
+              title: "Video Connected", 
               description: "Video call is now active"
             });
           } catch (error) {
             console.log('Video autoplay prevented:', error);
+            toast({
+              title: "Video Ready",
+              description: "Video stream received, click to enable if needed"
+            });
           }
         }
       }
@@ -182,6 +189,7 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
 
       // Add local stream to peer connection
       stream.getTracks().forEach(track => {
+        console.log('Adding local track:', track.kind);
         peerConnection.addTrack(track, stream);
       });
 
@@ -252,6 +260,7 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
       // Add local stream to existing peer connection
       if (peerConnectionRef.current) {
         stream.getTracks().forEach(track => {
+          console.log('Adding local track for answer:', track.kind);
           peerConnectionRef.current!.addTrack(track, stream);
         });
 
@@ -309,6 +318,7 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
     setIsMuted(false);
     setIsVideoEnabled(false);
     setAudioEnabled(false);
+    setHasRemoteVideo(false);
 
     socket?.emit('call-end', { chatId });
 
@@ -872,13 +882,15 @@ export default function ChatInterface({ chatId }: ChatInterfaceProps) {
             />
             
             {/* Waiting for remote video indicator */}
-            <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center" 
-                 style={{ display: remoteVideoRef.current?.srcObject ? 'none' : 'flex' }}>
-              <div className="text-center">
-                <Video className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-white text-lg">Waiting for video...</p>
+            {!hasRemoteVideo && (
+              <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center">
+                <div className="text-center">
+                  <Video className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-white text-lg">Waiting for video...</p>
+                  <p className="text-gray-400 text-sm mt-2">Make sure the other person has their camera enabled</p>
+                </div>
               </div>
-            </div>
+            )}
             
             {/* Local video (picture-in-picture) */}
             <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden border-2 border-white/20">
