@@ -32,6 +32,8 @@ Preferred communication style: Simple, everyday language.
 ✓ Added call interface with mute, video toggle, and call duration features
 ✓ Built incoming call notification system with answer/reject options
 ✓ Integrated WebRTC signaling through existing Socket.IO server
+✓ Fixed video call issues including infinite call-end loops, improved state management, and better error handling
+✓ Video calling now fully functional with users able to see each other during calls
 
 ## System Architecture
 
