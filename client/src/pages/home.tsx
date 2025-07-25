@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Lock, Users, Video, UserCheck, Smartphone, Phone, MessageCircle, Check, Heart, Github, Twitter, Mail } from "lucide-react";
+import { Shield, Lock, Users, Video, UserCheck, Smartphone, Phone, MessageCircle, Check, Heart, Github, ArrowRight, Menu, Twitter, Mail } from "lucide-react";
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
@@ -69,388 +69,282 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen">
-      {/* Background Elements */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-gradient-to-r from-pink-500/10 to-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-gradient-to-r from-cyan-500/5 to-emerald-500/5 rounded-full blur-2xl animate-float"></div>
-      </div>
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Background Grid */}
+      <div className="fixed inset-0 vercel-grid-fade opacity-50 pointer-events-none" />
 
       {/* Navigation */}
-      <nav className="relative z-10 p-4 md:p-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <Shield className="text-white text-lg" />
+      <nav className="relative z-10 border-b border-border bg-background/95 backdrop-blur-sm">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center">
+                <Shield className="text-background h-4 w-4" />
+              </div>
+              <span className="text-xl font-semibold">SecureChat</span>
             </div>
-            <span className="text-xl font-bold">SecureChat</span>
-          </div>
-          <div className="hidden md:flex items-center space-x-6">
-            <a href="#features" className="text-gray-400 hover:text-white transition-colors">Features</a>
-            <a href="#security" className="text-gray-400 hover:text-white transition-colors">Security</a>
-            <a href="#privacy" className="text-gray-400 hover:text-white transition-colors">Privacy</a>
-            <Button variant="secondary" size="sm">
-              <Github className="mr-2 h-4 w-4" />
-              GitHub
+            <div className="hidden md:flex items-center space-x-6">
+              <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors text-sm">Features</a>
+              <a href="#security" className="text-muted-foreground hover:text-foreground transition-colors text-sm">Security</a>
+              <a href="#privacy" className="text-muted-foreground hover:text-foreground transition-colors text-sm">Privacy</a>
+              <Button variant="outline" size="sm" className="text-sm">
+                <Github className="mr-2 h-3 w-3" />
+                GitHub
+              </Button>
+            </div>
+            <Button variant="ghost" size="sm" className="md:hidden">
+              <Menu className="h-5 w-5" />
             </Button>
           </div>
-          <Button variant="ghost" size="sm" className="md:hidden">
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </Button>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <main className="relative z-10 px-4 md:px-6 py-12 md:py-20">
+      <main className="relative z-10 px-4 md:px-6 py-20 md:py-32">
         <div className="max-w-4xl mx-auto text-center">
-          {/* Security Icon */}
-          <div className="mb-8 flex justify-center">
-            <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-full flex items-center justify-center security-icon animate-float">
-              <Lock className="text-3xl md:text-4xl text-white" />
-            </div>
-          </div>
-
           {/* Main Heading */}
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
-            <span className="gradient-text">Disposable</span> <br />
-            <span className="text-white">E2EE Chat</span>
+          <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold mb-8 leading-tight tracking-tight">
+            <span className="vercel-text-gradient">Secure Chat.</span> <br />
+            <span className="text-foreground">No Strings Attached.</span>
           </h1>
 
           {/* Subtitle */}
-          <p className="text-xl md:text-2xl text-gray-400 mb-8 max-w-3xl mx-auto leading-relaxed">
-            Secure, end-to-end encrypted environment for exchanging 
-            sensitive information with peers
+          <p className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-2xl mx-auto leading-relaxed">
+            End-to-end encrypted messaging that disappears. 
+            No accounts, no tracking, just pure privacy.
           </p>
 
-          {/* Key Features */}
-          <div className="mb-12 space-y-3">
-            <div className="flex items-center justify-center space-x-3 text-emerald-400">
-              <Check className="h-5 w-5" />
-              <span className="text-lg">No login/signup required</span>
-            </div>
-            <div className="flex items-center justify-center space-x-3 text-emerald-400">
-              <Check className="h-5 w-5" />
-              <span className="text-lg">No tracker</span>
-            </div>
-            <div className="flex items-center justify-center space-x-3 text-emerald-400">
-              <Check className="h-5 w-5" />
-              <span className="text-lg">Your messages are end-to-end encrypted</span>
-            </div>
-          </div>
-
           {/* CTA Button */}
-          <div className="mb-12">
+          <div className="mb-16">
             <Button 
               onClick={handleCreateChatLink}
               disabled={isLoading}
-              className="glow-button bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 px-8 md:px-12 py-4 md:py-6 text-lg md:text-xl font-semibold transform transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="vercel-button px-8 py-4 text-lg font-medium rounded-full hover:scale-105 transform transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-3"></div>
+                  <div className="w-5 h-5 border-2 border-background border-t-transparent rounded-full animate-spin mr-3"></div>
                   Creating secure link...
                 </>
               ) : (
                 <>
-                  <MessageCircle className="mr-3 h-5 w-5" />
-                  Create chat link
+                  Start Secure Chat
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </>
               )}
             </Button>
           </div>
 
-          {/* Open Source Notice */}
-          <div className="flex items-center justify-center space-x-2 text-gray-400">
-            <Heart className="h-4 w-4 text-red-400" />
-            <span>The source-code is public on GitHub, feel free to contribute!</span>
+          {/* Key Features */}
+          <div className="grid md:grid-cols-3 gap-8 text-sm text-muted-foreground">
+            <div className="flex items-center justify-center space-x-2">
+              <Check className="h-4 w-4 text-foreground" />
+              <span>No registration required</span>
+            </div>
+            <div className="flex items-center justify-center space-x-2">
+              <Shield className="h-4 w-4 text-foreground" />
+              <span>End-to-end encrypted</span>
+            </div>
+            <div className="flex items-center justify-center space-x-2">
+              <Lock className="h-4 w-4 text-foreground" />
+              <span>No message storage</span>
+            </div>
           </div>
         </div>
       </main>
 
       {/* Features Section */}
-      <section id="features" className="relative z-10 px-4 md:px-6 py-16 md:py-24">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-center mb-16">
-            <span className="gradient-text">Why Choose</span> SecureChat?
-          </h2>
+      <section id="features" className="relative z-10 px-4 md:px-6 py-20 md:py-32 border-t border-border">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-20">
+            <h2 className="text-3xl md:text-5xl font-bold mb-4 vercel-text-gradient">
+              Built for Privacy
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Military-grade encryption meets modern design. 
+              No compromises on security or user experience.
+            </p>
+          </div>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Feature 1 */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/10 transition-all duration-300 group">
-              <div className="w-12 h-12 bg-cyan-500 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <UserCheck className="text-xl text-white" />
+            <div className="vercel-card group">
+              <div className="w-10 h-10 bg-foreground rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <UserCheck className="h-5 w-5 text-background" />
               </div>
-              <h3 className="text-xl font-semibold mb-4">Anonymous</h3>
-              <p className="text-gray-400">No registration required. Generate secure chat links instantly without revealing your identity.</p>
+              <h3 className="text-lg font-semibold mb-3">Anonymous</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                No registration required. Generate secure chat links instantly without revealing your identity.
+              </p>
             </div>
 
             {/* Feature 2 */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/10 transition-all duration-300 group">
-              <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Shield className="text-xl text-white" />
+            <div className="vercel-card group">
+              <div className="w-10 h-10 bg-foreground rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Shield className="h-5 w-5 text-background" />
               </div>
-              <h3 className="text-xl font-semibold mb-4">End-to-End Encrypted</h3>
-              <p className="text-gray-400">Military-grade encryption using Signal Protocol ensures your messages stay private.</p>
+              <h3 className="text-lg font-semibold mb-3">End-to-End Encrypted</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Military-grade encryption using Signal Protocol ensures your messages stay private.
+              </p>
             </div>
 
             {/* Feature 3 */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/10 transition-all duration-300 group">
-              <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <svg className="text-xl text-white w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.332 8.027a6.012 6.012 0 011.912-2.706C6.512 5.73 6.974 6 7.5 6A1.5 1.5 0 019 7.5V8a2 2 0 004 0 2 2 0 011.523-1.943A5.977 5.977 0 0116 10c0 .34-.028.675-.083 1H15a2 2 0 00-2 2v2.197A5.973 5.973 0 0110 16v-2a2 2 0 00-2-2 2 2 0 01-2-2 2 2 0 00-1.668-1.973z" clipRule="evenodd" />
-                </svg>
+            <div className="vercel-card group">
+              <div className="w-10 h-10 bg-foreground rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Lock className="h-5 w-5 text-background" />
               </div>
-              <h3 className="text-xl font-semibold mb-4">Ephemeral</h3>
-              <p className="text-gray-400">Messages are never stored on servers. Complete privacy by design.</p>
+              <h3 className="text-lg font-semibold mb-3">Ephemeral</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Messages are never stored on servers. Complete privacy by design.
+              </p>
             </div>
 
             {/* Feature 4 */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/10 transition-all duration-300 group">
-              <div className="w-12 h-12 bg-pink-500 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Video className="text-xl text-white" />
+            <div className="vercel-card group">
+              <div className="w-10 h-10 bg-foreground rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Video className="h-5 w-5 text-background" />
               </div>
-              <h3 className="text-xl font-semibold mb-4">Voice & Video</h3>
-              <p className="text-gray-400">Secure WebRTC-powered voice and video calls with DTLS-SRTP encryption.</p>
+              <h3 className="text-lg font-semibold mb-3">Voice & Video</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Secure WebRTC-powered voice and video calls with DTLS-SRTP encryption.
+              </p>
             </div>
 
             {/* Feature 5 */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/10 transition-all duration-300 group">
-              <div className="w-12 h-12 bg-cyan-500 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <svg className="text-xl text-white w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" />
-                  <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z" />
-                </svg>
+            <div className="vercel-card group">
+              <div className="w-10 h-10 bg-foreground rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <MessageCircle className="h-5 w-5 text-background" />
               </div>
-              <h3 className="text-xl font-semibold mb-4">AI Assistant</h3>
-              <p className="text-gray-400">Local AI chat assistant powered by ONNX.js while maintaining full privacy.</p>
+              <h3 className="text-lg font-semibold mb-3">Real-time</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Instant messaging with typing indicators and delivery confirmations.
+              </p>
             </div>
 
             {/* Feature 6 */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/10 transition-all duration-300 group">
-              <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Smartphone className="text-xl text-white" />
+            <div className="vercel-card group">
+              <div className="w-10 h-10 bg-foreground rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Smartphone className="h-5 w-5 text-background" />
               </div>
-              <h3 className="text-xl font-semibold mb-4">Progressive Web App</h3>
-              <p className="text-gray-400">Install as a native app on any device. Offline-capable with service workers.</p>
+              <h3 className="text-lg font-semibold mb-3">Progressive Web App</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Install as a native app on any device. Offline-capable with service workers.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Chat Interface Preview */}
-      <section className="relative z-10 px-4 md:px-6 py-16 md:py-24">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-center mb-16">
-            <span className="gradient-text">WhatsApp-Style</span> Interface
+      {/* Security Section */}
+      <section className="relative z-10 px-4 md:px-6 py-20 md:py-32 border-t border-border">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl md:text-5xl font-bold mb-6 vercel-text-gradient">
+            Zero-Knowledge Architecture
           </h2>
+          <p className="text-lg text-muted-foreground mb-16 max-w-2xl mx-auto">
+            Our servers never see your messages, metadata, or encryption keys. 
+            All cryptographic operations happen locally in your browser.
+          </p>
           
-          {/* Mock Chat Interface */}
-          <div className="glass-card rounded-3xl overflow-hidden mx-auto max-w-sm md:max-w-md">
-            {/* Chat Header */}
-            <div className="bg-gray-800/50 p-4 flex items-center space-x-3">
-              <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
-                <Users className="text-white h-5 w-5" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold">Anonymous User</h3>
-                <p className="text-sm text-gray-400">End-to-end encrypted</p>
-              </div>
-              <div className="flex space-x-3">
-                <button className="text-cyan-400 hover:text-white transition-colors">
-                  <Phone className="h-5 w-5" />
-                </button>
-                <button className="text-cyan-400 hover:text-white transition-colors">
-                  <Video className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-            
-            {/* Chat Messages */}
-            <div className="p-4 space-y-4 h-64 overflow-y-auto">
-              {/* Received Message */}
-              <div className="flex items-start space-x-2">
-                <div className="bg-gray-700 rounded-2xl px-4 py-2 max-w-xs">
-                  <p className="text-sm">Hello! This message is encrypted 🔒</p>
-                  <span className="text-xs text-gray-400">2:14 PM</span>
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div className="space-y-6 text-left">
+              <div className="flex items-start space-x-4">
+                <div className="w-8 h-8 bg-foreground rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                  <Check className="h-4 w-4 text-background" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">Client-Side Encryption</h3>
+                  <p className="text-sm text-muted-foreground">Messages are encrypted in your browser before transmission using industry-standard libsodium.</p>
                 </div>
               </div>
               
-              {/* Sent Message */}
-              <div className="flex items-start space-x-2 justify-end">
-                <div className="bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl px-4 py-2 max-w-xs">
-                  <p className="text-sm text-white">Great! Privacy first 🛡️</p>
-                  <span className="text-xs text-white opacity-70">2:15 PM ✓✓</span>
+              <div className="flex items-start space-x-4">
+                <div className="w-8 h-8 bg-foreground rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                  <Check className="h-4 w-4 text-background" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">Perfect Forward Secrecy</h3>
+                  <p className="text-sm text-muted-foreground">Each message uses unique encryption keys that are immediately discarded after use.</p>
                 </div>
               </div>
               
-              {/* System Message */}
-              <div className="text-center">
-                <span className="text-xs bg-gray-800 px-3 py-1 rounded-full text-gray-400">
-                  <Shield className="inline h-3 w-3 mr-1" />
-                  Messages are end-to-end encrypted
-                </span>
+              <div className="flex items-start space-x-4">
+                <div className="w-8 h-8 bg-foreground rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                  <Check className="h-4 w-4 text-background" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">No Server Storage</h3>
+                  <p className="text-sm text-muted-foreground">Messages are relayed through our servers but never stored. Complete ephemerality by design.</p>
+                </div>
               </div>
             </div>
             
-            {/* Chat Input */}
-            <div className="bg-gray-800/50 p-4 flex items-center space-x-3">
-              <button className="text-gray-400 hover:text-white transition-colors">
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
-              </button>
-              <div className="flex-1 bg-gray-700 rounded-full px-4 py-2">
-                <input 
-                  type="text" 
-                  placeholder="Type a message..." 
-                  className="bg-transparent w-full focus:outline-none text-white placeholder-gray-400"
-                  readOnly
-                />
+            <div className="vercel-card p-8">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Encryption Algorithm</span>
+                  <span className="font-mono">ChaCha20-Poly1305</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Key Exchange</span>
+                  <span className="font-mono">X25519</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Hash Function</span>
+                  <span className="font-mono">BLAKE2b</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Message Storage</span>
+                  <span className="font-mono text-red-500">None</span>
+                </div>
               </div>
-              <button className="text-cyan-400 hover:text-white transition-colors">
-                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zM9 9a1 1 0 100-2 1 1 0 000 2zM13 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                </svg>
-              </button>
-              <button className="w-10 h-10 bg-pink-500 rounded-full flex items-center justify-center">
-                <svg className="text-white h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                </svg>
-              </button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Security Details */}
-      <section id="security" className="relative z-10 px-4 md:px-6 py-16 md:py-24">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-center mb-16">
-            <span className="gradient-text">Security</span> Architecture
-          </h2>
-          
-          <div className="space-y-8">
-            {/* Signal Protocol */}
-            <div className="glass-card rounded-2xl p-8">
-              <div className="flex items-center space-x-4 mb-6">
-                <div className="w-12 h-12 bg-pink-500 rounded-xl flex items-center justify-center">
-                  <svg className="text-xl text-white w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <h3 className="text-2xl font-semibold">Signal Protocol Implementation</h3>
-              </div>
-              <p className="text-gray-400 mb-4">
-                Built on the same cryptographic foundation that powers Signal Messenger, using @signalapp/libsignal-client 
-                with TypeScript bindings and Rust-based core implementation.
-              </p>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-cyan-400">Key Features:</h4>
-                  <ul className="text-sm text-gray-400 space-y-1">
-                    <li>• Perfect Forward Secrecy</li>
-                    <li>• Double Ratchet Protocol</li>
-                    <li>• X3DH Key Agreement</li>
-                    <li>• Pre-key Distribution</li>
-                  </ul>
-                </div>
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-emerald-400">Technologies:</h4>
-                  <ul className="text-sm text-gray-400 space-y-1">
-                    <li>• Curve25519 ECDH</li>
-                    <li>• AES-256-GCM</li>
-                    <li>• HMAC-SHA256</li>
-                    <li>• Ed25519 Signatures</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
 
-            {/* WebRTC Security */}
-            <div className="glass-card rounded-2xl p-8">
-              <div className="flex items-center space-x-4 mb-6">
-                <div className="w-12 h-12 bg-cyan-500 rounded-xl flex items-center justify-center">
-                  <svg className="text-xl text-white w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
-                  </svg>
-                </div>
-                <h3 className="text-2xl font-semibold">WebRTC Media Encryption</h3>
-              </div>
-              <p className="text-gray-400 mb-4">
-                Voice and video calls use WebRTC's built-in DTLS-SRTP encryption, providing 
-                secure peer-to-peer communication without relying on central servers.
-              </p>
-              <div className="bg-gray-800/50 rounded-xl p-4">
-                <code className="text-sm text-cyan-400">
-                  {`// WebRTC configuration with DTLS-SRTP
-const peerConnection = new RTCPeerConnection({
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-});`}
-                </code>
-              </div>
-            </div>
-
-            {/* Zero Knowledge */}
-            <div className="glass-card rounded-2xl p-8">
-              <div className="flex items-center space-x-4 mb-6">
-                <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center">
-                  <svg className="text-xl text-white w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                  </svg>
-                </div>
-                <h3 className="text-2xl font-semibold">Zero-Knowledge Architecture</h3>
-              </div>
-              <p className="text-gray-400">
-                Our relay servers never see your messages, metadata, or encryption keys. 
-                All cryptographic operations happen locally in your browser, ensuring complete privacy.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Footer */}
-      <footer className="relative z-10 px-4 md:px-6 py-12 border-t border-gray-800">
+      <footer className="relative z-10 px-4 md:px-6 py-16 border-t border-border">
         <div className="max-w-4xl mx-auto text-center">
           <div className="flex items-center justify-center space-x-3 mb-6">
-            <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <Shield className="text-white text-sm" />
+            <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center">
+              <Shield className="text-background h-4 w-4" />
             </div>
             <span className="text-lg font-semibold">SecureChat</span>
           </div>
           
-          <p className="text-gray-400 mb-6">
-            Open-source, privacy-first messaging built with React, Signal Protocol, and WebRTC.
+          <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+            Open-source, privacy-first messaging built with modern web technologies.
           </p>
           
-          <div className="flex justify-center space-x-6 mb-6">
-            <a href="#" className="text-gray-400 hover:text-cyan-400 transition-colors">
-              <Github className="text-xl" />
+          <div className="flex justify-center space-x-6 mb-8">
+            <a href="#" className="text-muted-foreground hover:text-foreground transition-colors p-2">
+              <Github className="h-5 w-5" />
             </a>
-            <a href="#" className="text-gray-400 hover:text-cyan-400 transition-colors">
-              <Twitter className="text-xl" />
+            <a href="#" className="text-muted-foreground hover:text-foreground transition-colors p-2">
+              <Twitter className="h-5 w-5" />
             </a>
-            <a href="#" className="text-gray-400 hover:text-cyan-400 transition-colors">
-              <Mail className="text-xl" />
+            <a href="#" className="text-muted-foreground hover:text-foreground transition-colors p-2">
+              <Mail className="h-5 w-5" />
             </a>
           </div>
           
-          <p className="text-sm text-gray-400">
-            Built with ❤️ for privacy. Licensed under MIT.
-          </p>
+          <div className="text-xs text-muted-foreground border-t border-border pt-8">
+            <p>© 2025 SecureChat. Licensed under MIT. Built for privacy.</p>
+          </div>
         </div>
       </footer>
 
       {/* Loading Overlay */}
       {isLoading && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="glass-card rounded-2xl p-8 text-center max-w-sm mx-4">
-            <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="vercel-card p-8 text-center max-w-sm mx-4">
+            <div className="w-12 h-12 border-2 border-foreground border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-lg font-semibold">Generating secure chat link...</p>
-            <p className="text-sm text-gray-400 mt-2">Creating encryption keys</p>
+            <p className="text-sm text-muted-foreground mt-2">Creating encryption keys</p>
           </div>
         </div>
       )}
