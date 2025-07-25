@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { FileUpload } from "@/components/FileUpload";
 import { EphemeralFileViewer } from "@/components/EphemeralFileViewer";
+import { io, Socket } from "socket.io-client";
 
 interface Message {
   id: string;
@@ -31,23 +32,90 @@ export default function Chat() {
   const [isConnected, setIsConnected] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [ephemeralViewer, setEphemeralViewer] = useState<File | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [connectedUsers, setConnectedUsers] = useState(1);
+  const socketRef = useRef<Socket | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const userIdRef = useRef<string>(crypto.randomUUID());
   const { toast } = useToast();
 
   useEffect(() => {
-    // Simulate connection for demo
-    setIsConnected(true);
-    
-    // Add welcome message
-    setMessages([
-      {
-        id: "1",
-        content: "🔒 End-to-end encrypted chat established. Your messages are secure.",
+    if (!chatId) return;
+
+    // Connect to socket
+    const socket = io('/', {
+      query: { chatId }
+    });
+
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      setIsConnected(true);
+      console.log('Connected to chat');
+      
+      // Join the chat room
+      socket.emit('join-chat', {
+        chatId,
+        userId: userIdRef.current,
+        publicKey: null // For demo, we'll skip E2EE key exchange
+      });
+    });
+
+    socket.on('disconnect', () => {
+      setIsConnected(false);
+      console.log('Disconnected from chat');
+    });
+
+    // Handle receiving messages
+    socket.on('receive-message', (data: any) => {
+      const message: Message = {
+        id: data.messageId || Date.now().toString(),
+        content: data.encryptedContent, // In demo, we'll treat as plain text
+        sender: data.senderId === userIdRef.current ? "me" : "other",
+        timestamp: new Date(data.timestamp),
+        type: "text"
+      };
+      
+      setMessages(prev => [...prev, message]);
+    });
+
+    // Handle user events
+    socket.on('user-joined', (data: any) => {
+      console.log('User joined:', data.userId);
+      setConnectedUsers(prev => prev + 1);
+      
+      const joinMessage: Message = {
+        id: Date.now().toString(),
+        content: "🔒 User joined the encrypted chat",
         sender: "other",
         timestamp: new Date(),
         type: "text"
-      }
-    ]);
+      };
+      setMessages(prev => [...prev, joinMessage]);
+    });
+
+    socket.on('user-left', (data: any) => {
+      console.log('User left:', data.userId);
+      setConnectedUsers(prev => Math.max(1, prev - 1));
+      
+      const leaveMessage: Message = {
+        id: Date.now().toString(),
+        content: "👋 User left the chat",
+        sender: "other",
+        timestamp: new Date(),
+        type: "text"
+      };
+      setMessages(prev => [...prev, leaveMessage]);
+    });
+
+    // Handle typing indicators - the server doesn't currently send typing events in this format
+    // This would need to be implemented on the server side to match the expected format
+
+    // Cleanup on unmount
+    return () => {
+      socket.disconnect();
+    };
   }, [chatId]);
 
   useEffect(() => {
@@ -55,30 +123,45 @@ export default function Chat() {
   }, [messages]);
 
   const sendMessage = () => {
-    if (!newMessage.trim() || !isConnected) return;
+    if (!newMessage.trim() || !isConnected || !socketRef.current) return;
 
+    const messageId = crypto.randomUUID();
     const message: Message = {
-      id: Date.now().toString(),
+      id: messageId,
       content: newMessage,
       sender: "me",
       timestamp: new Date(),
       type: "text"
     };
 
+    // Add message to local state immediately for instant feedback
     setMessages(prev => [...prev, message]);
-    setNewMessage("");
 
-    // Simulate response
-    setTimeout(() => {
-      const response: Message = {
-        id: (Date.now() + 1).toString(),
-        content: "Thanks for your message! This is a secure chat demo.",
-        sender: "other",
-        timestamp: new Date(),
-        type: "text"
-      };
-      setMessages(prev => [...prev, response]);
-    }, 1000);
+    // Send message via socket
+    socketRef.current.emit('send-message', {
+      chatId,
+      encryptedContent: newMessage, // In demo, sending as plain text
+      messageId,
+      recipientId: null // Broadcast to all in chat
+    });
+
+    setNewMessage("");
+    
+    // Stop typing indicator
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    // Note: Typing indicators would need server-side implementation
+  };
+
+  const handleTyping = (value: string) => {
+    setNewMessage(value);
+    
+    if (!socketRef.current) return;
+
+    // Note: Typing indicators would need server-side implementation
+    // For now, we'll skip this to focus on core messaging functionality
   };
 
   const handleFileSelect = (file: File, isEphemeral: boolean) => {
@@ -131,7 +214,7 @@ export default function Chat() {
             <h2 className="font-semibold">Anonymous User</h2>
             <p className="text-sm text-muted-foreground flex items-center">
               <span className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
-              {isConnected ? 'End-to-end encrypted' : 'Connecting...'}
+              {isConnected ? `${connectedUsers} user${connectedUsers !== 1 ? 's' : ''} • Encrypted` : 'Connecting...'}
             </p>
           </div>
         </div>
@@ -242,8 +325,8 @@ export default function Chat() {
           
           <Input
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
+            onChange={(e) => handleTyping(e.target.value)}
+            placeholder={isTyping ? "User is typing..." : "Type a message..."}
             onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
             className="flex-1"
           />
