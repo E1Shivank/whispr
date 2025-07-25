@@ -144,18 +144,26 @@ export class WebRTCService {
 
   async answerCall(isVideo: boolean = false): Promise<MediaStream> {
     try {
-      // Get user media
+      console.log('Getting user media for answer...');
+      
+      // Get user media with same constraints as offer
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: isVideo,
-        audio: true
+        video: isVideo ? { 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 },
+          facingMode: 'user'
+        } : false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
       });
 
-      // Add local stream to peer connection
-      if (this.peerConnection && this.localStream) {
-        this.localStream.getTracks().forEach(track => {
-          this.peerConnection!.addTrack(track, this.localStream!);
-        });
-      }
+      console.log('Got local stream for answer:', this.localStream.getTracks().map(t => t.kind));
+
+      // Add local stream to peer connection (this will be done in handleCallOffer)
+      // We don't add tracks here to avoid duplicate tracks
 
       return this.localStream;
     } catch (error) {

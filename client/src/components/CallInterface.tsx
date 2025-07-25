@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WebRTCService } from '@/lib/webrtc';
+import { RingtonePlayer } from './RingtonePlayer';
 
 interface CallInterfaceProps {
   webrtcService: WebRTCService;
@@ -24,18 +25,22 @@ export function CallInterface({
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
+  const [isRinging, setIsRinging] = useState(false);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const callStartTimeRef = useRef<number>(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     // Set up remote stream handler
     webrtcService.onRemoteStream((stream) => {
       console.log('Received remote stream');
+      setIsRinging(false);
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
+        remoteVideoRef.current.play().catch(e => console.log('Remote video play error:', e));
         setIsConnected(true);
         startCallTimer();
         console.log('Remote stream connected');
@@ -46,14 +51,31 @@ export function CallInterface({
     webrtcService.onCallEnd(() => {
       console.log('Call ended callback triggered');
       setIsConnected(false);
+      setIsRinging(false);
       stopCallTimer();
       onCallEnd();
     });
 
+    // Start ringing for incoming calls
+    if (isIncomingCall) {
+      setIsRinging(true);
+    }
+
+    // Set up local stream for calls that are already in progress
+    if (!isIncomingCall && isVideoCall) {
+      const localStream = webrtcService.getLocalStream();
+      if (localStream && localVideoRef.current) {
+        localVideoRef.current.srcObject = localStream;
+        localVideoRef.current.play().catch(e => console.log('Local video play error:', e));
+        console.log('Local stream set to video element');
+      }
+    }
+
     return () => {
       stopCallTimer();
+      setIsRinging(false);
     };
-  }, [webrtcService, onCallEnd]);
+  }, [webrtcService, onCallEnd, isIncomingCall, isVideoCall]);
 
   const startCallTimer = () => {
     callStartTimeRef.current = Date.now();
@@ -73,16 +95,20 @@ export function CallInterface({
   const handleAnswerCall = async () => {
     try {
       console.log(`Answering ${isVideoCall ? 'video' : 'audio'} call...`);
+      setIsRinging(false);
+      
       const localStream = await webrtcService.answerCall(isVideoCall);
       
       if (localVideoRef.current && isVideoCall && localStream) {
         localVideoRef.current.srcObject = localStream;
-        console.log('Local video stream set');
+        localVideoRef.current.play().catch(e => console.log('Local video play error:', e));
+        console.log('Local video stream set for answered call');
       }
       
       onCallAnswer();
     } catch (error) {
       console.error('Error answering call:', error);
+      setIsRinging(false);
       onCallReject();
     }
   };
@@ -114,7 +140,7 @@ export function CallInterface({
     return (
       <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50">
         <div className="vercel-card max-w-md w-full mx-4 text-center">
-          <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className={`w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 ${isRinging ? 'animate-pulse' : ''}`}>
             {isVideoCall ? (
               <Video className="h-10 w-10 text-white" />
             ) : (
@@ -126,9 +152,15 @@ export function CallInterface({
             Incoming {isVideoCall ? 'Video' : 'Audio'} Call
           </h3>
           
-          <p className="text-muted-foreground mb-6">
+          <p className="text-muted-foreground mb-2">
             Anonymous user wants to {isVideoCall ? 'video' : 'voice'} chat with you
           </p>
+          
+          {isRinging && (
+            <p className="text-green-400 text-sm mb-4 animate-pulse">
+              📞 Ringing...
+            </p>
+          )}
           
           <div className="flex space-x-4">
             <Button
@@ -148,6 +180,9 @@ export function CallInterface({
             </Button>
           </div>
         </div>
+        
+        {/* Ringtone for incoming calls */}
+        <RingtonePlayer isPlaying={isRinging} />
       </div>
     );
   }
@@ -164,6 +199,8 @@ export function CallInterface({
               autoPlay
               playsInline
               className="w-full h-full object-cover bg-gray-900"
+              onLoadedMetadata={() => console.log('Remote video metadata loaded')}
+              onPlay={() => console.log('Remote video playing')}
             />
             
             {/* Local video (picture-in-picture) */}
@@ -174,8 +211,20 @@ export function CallInterface({
                 playsInline
                 muted
                 className="w-full h-full object-cover"
+                onLoadedMetadata={() => console.log('Local video metadata loaded')}
+                onPlay={() => console.log('Local video playing')}
               />
             </div>
+            
+            {/* Connection status overlay */}
+            {!isConnected && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                  <p className="text-white text-lg">Connecting...</p>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <>

@@ -157,9 +157,13 @@ export default function Chat() {
 
     // Handle call events
     socket.on('call-offer', (data: any) => {
-      console.log('Incoming call offer');
+      console.log('Incoming call offer:', data);
       setIsIncomingCall(true);
       setIsVideoCall(data.isVideo);
+      
+      // Play notification sound
+      const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjua3/LReSYELIHO8tiJNwgZaLvt559NEAxQp+Pw');
+      audio.play().catch(e => console.log('Audio play failed:', e));
     });
 
     socket.on('call-answer', () => {
@@ -293,11 +297,20 @@ export default function Chat() {
     try {
       console.log(`Starting ${isVideo ? 'video' : 'audio'} call...`);
       setIsVideoCall(isVideo);
+      setIsInCall(true); // Set immediately to show call interface
       
       // Check for media permissions first
       const constraints = {
-        video: isVideo,
-        audio: true
+        video: isVideo ? { 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 },
+          facingMode: 'user'
+        } : false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
       };
       
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -307,7 +320,13 @@ export default function Chat() {
       stream.getTracks().forEach(track => track.stop());
       
       const localStream = await webrtcServiceRef.current.startCall(isVideo);
-      setIsInCall(true);
+      console.log('Call started with local stream');
+      
+      // Set local stream to video element if it's a video call
+      if (isVideo && localStream) {
+        // We'll pass this stream to the CallInterface component
+        console.log('Local stream ready for video call');
+      }
       
       toast({
         title: `${isVideo ? 'Video' : 'Audio'} call started`,
