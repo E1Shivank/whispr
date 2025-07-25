@@ -115,10 +115,7 @@ export class WebRTCService {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 48000,
-          channelCount: 1,
-          latency: 0.01 // Request low latency
+          autoGainControl: true
         }
       });
 
@@ -132,22 +129,15 @@ export class WebRTCService {
           this.peerConnection!.addTrack(track, this.localStream!);
         });
 
-        // Create offer with optimized settings for low latency
+        // Create offer
         console.log('Creating offer...');
         const offer = await this.peerConnection.createOffer({
           offerToReceiveAudio: true,
-          offerToReceiveVideo: isVideo,
-          iceRestart: false
+          offerToReceiveVideo: isVideo
         });
         
-        // Modify SDP for lower latency
-        const modifiedOffer = {
-          ...offer,
-          sdp: this.optimizeSDP(offer.sdp || '')
-        };
-        
-        await this.peerConnection.setLocalDescription(modifiedOffer);
-        console.log('Local description set with optimizations');
+        await this.peerConnection.setLocalDescription(offer);
+        console.log('Local description set');
 
         // Send offer through socket
         if (this.socket && this.chatId) {
@@ -222,10 +212,7 @@ export class WebRTCService {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 48000,
-          channelCount: 1,
-          latency: 0.01 // Request low latency
+          autoGainControl: true
         }
       });
 
@@ -234,17 +221,10 @@ export class WebRTCService {
         this.peerConnection!.addTrack(track, this.localStream!);
       });
 
-      // Create answer with optimizations
+      // Create answer
       console.log('Creating answer...');
       const answer = await this.peerConnection.createAnswer();
-      
-      // Modify SDP for lower latency
-      const modifiedAnswer = {
-        ...answer,
-        sdp: this.optimizeSDP(answer.sdp || '')
-      };
-      
-      await this.peerConnection.setLocalDescription(modifiedAnswer);
+      await this.peerConnection.setLocalDescription(answer);
 
       // Send answer
       if (this.socket && this.chatId) {
@@ -366,38 +346,8 @@ export class WebRTCService {
   }
 
   private optimizeSDP(sdp: string): string {
-    // Optimize SDP for lower latency
-    let optimizedSDP = sdp;
-    
-    // Prefer VP8 over other codecs for lower latency
-    optimizedSDP = optimizedSDP.replace(
-      /m=video (\d+) RTP\/SAVPF (.+)/,
-      (match, port, codecs) => {
-        const codecList = codecs.split(' ');
-        const vp8Index = codecList.findIndex((codec: string) => 
-          optimizedSDP.includes(`a=rtpmap:${codec} VP8/90000`)
-        );
-        if (vp8Index !== -1) {
-          const vp8Codec = codecList.splice(vp8Index, 1)[0];
-          codecList.unshift(vp8Codec);
-        }
-        return `m=video ${port} RTP/SAVPF ${codecList.join(' ')}`;
-      }
-    );
-    
-    // Add low latency settings
-    optimizedSDP = optimizedSDP.replace(
-      /(a=rtpmap:\d+ VP8\/90000\r\n)/g,
-      '$1a=rtcp-fb:* goog-remb\r\na=rtcp-fb:* transport-cc\r\na=rtcp-fb:* ccm fir\r\na=rtcp-fb:* nack\r\na=rtcp-fb:* nack pli\r\n'
-    );
-    
-    // Optimize audio for low latency
-    optimizedSDP = optimizedSDP.replace(
-      /(a=rtpmap:\d+ opus\/48000\/2\r\n)/g,
-      '$1a=fmtp:* minptime=10;useinbandfec=1\r\n'
-    );
-    
-    return optimizedSDP;
+    // Simple SDP optimization without problematic modifications
+    return sdp;
   }
 
   private monitorConnectionQuality(): void {
