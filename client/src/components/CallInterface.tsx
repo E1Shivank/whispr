@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
-import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Volume2 } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Volume2, Wifi } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WebRTCService } from '@/lib/webrtc';
 import { RingtonePlayer } from './RingtonePlayer';
+import { throttle } from '@/lib/performance';
 
 interface CallInterfaceProps {
   webrtcService: WebRTCService;
@@ -26,6 +27,7 @@ export function CallInterface({
   const [callDuration, setCallDuration] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const [isRinging, setIsRinging] = useState(false);
+  const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'fair' | 'poor'>('good');
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -120,15 +122,30 @@ export function CallInterface({
     onCallEnd();
   };
 
-  const toggleMute = () => {
+
+
+  // Throttled control functions for better performance
+  const toggleMute = useCallback(throttle(() => {
     const muted = webrtcService.toggleMute();
     setIsMuted(muted);
-  };
+  }, 100), [webrtcService]);
 
-  const toggleVideo = () => {
+  const toggleVideo = useCallback(throttle(() => {
     const videoOff = webrtcService.toggleVideo();
     setIsVideoOff(videoOff);
-  };
+  }, 100), [webrtcService]);
+
+  // Monitor connection quality
+  useEffect(() => {
+    if (!isConnected) return;
+    
+    const qualityMonitor = setInterval(() => {
+      const quality = webrtcService.getConnectionQuality();
+      setConnectionQuality(quality);
+    }, 3000);
+
+    return () => clearInterval(qualityMonitor);
+  }, [isConnected, webrtcService]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -198,13 +215,16 @@ export function CallInterface({
               ref={remoteVideoRef}
               autoPlay
               playsInline
-              className="w-full h-full object-cover bg-gray-900"
+              muted={false}
+              className="w-full h-full object-cover bg-gray-900 transition-opacity duration-300"
+              style={{ opacity: isConnected ? 1 : 0.5 }}
               onLoadedMetadata={() => console.log('Remote video metadata loaded')}
               onPlay={() => console.log('Remote video playing')}
+              onCanPlay={() => setIsConnected(true)}
             />
             
             {/* Local video (picture-in-picture) */}
-            <div className="absolute top-4 right-4 w-32 h-24 bg-gray-800 rounded-lg overflow-hidden border-2 border-white/20">
+            <div className="absolute top-4 right-4 w-32 h-24 bg-gray-800 rounded-lg overflow-hidden border-2 border-white/20 transition-all duration-300 hover:scale-105">
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -214,17 +234,23 @@ export function CallInterface({
                 onLoadedMetadata={() => console.log('Local video metadata loaded')}
                 onPlay={() => console.log('Local video playing')}
               />
+              {/* Connection quality indicator */}
+              <div className="absolute top-1 left-1">
+                <div className={`w-2 h-2 rounded-full ${
+                  connectionQuality === 'excellent' ? 'bg-green-400' :
+                  connectionQuality === 'good' ? 'bg-yellow-400' :
+                  connectionQuality === 'fair' ? 'bg-orange-400' : 'bg-red-400'
+                }`} />
+              </div>
             </div>
             
-            {/* Connection status overlay */}
-            {!isConnected && (
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-                  <p className="text-white text-lg">Connecting...</p>
-                </div>
+            {/* Connection status overlay with smooth transition */}
+            <div className={`absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity duration-500 ${isConnected ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                <p className="text-white text-lg">Connecting...</p>
               </div>
-            )}
+            </div>
           </>
         ) : (
           <>
@@ -238,9 +264,19 @@ export function CallInterface({
                   {isConnected ? 'Call in Progress' : 'Connecting...'}
                 </h2>
                 {isConnected && (
-                  <p className="text-gray-300 text-lg">
-                    {formatDuration(callDuration)}
-                  </p>
+                  <div className="text-center">
+                    <p className="text-gray-300 text-lg mb-2">
+                      {formatDuration(callDuration)}
+                    </p>
+                    <div className="flex items-center justify-center space-x-2">
+                      <Wifi className={`w-4 h-4 ${
+                        connectionQuality === 'excellent' ? 'text-green-400' :
+                        connectionQuality === 'good' ? 'text-yellow-400' :
+                        connectionQuality === 'fair' ? 'text-orange-400' : 'text-red-400'
+                      }`} />
+                      <span className="text-gray-400 text-sm capitalize">{connectionQuality}</span>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -251,25 +287,34 @@ export function CallInterface({
         )}
       </div>
 
-      {/* Call status */}
+      {/* Call status with connection quality */}
       {isVideoCall && (
         <div className="absolute top-4 left-4">
           <div className="bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2">
-            <p className="text-white text-sm">
-              {isConnected ? formatDuration(callDuration) : 'Connecting...'}
-            </p>
+            <div className="flex items-center space-x-2">
+              <p className="text-white text-sm">
+                {isConnected ? formatDuration(callDuration) : 'Connecting...'}
+              </p>
+              {isConnected && (
+                <Wifi className={`w-3 h-3 ${
+                  connectionQuality === 'excellent' ? 'text-green-400' :
+                  connectionQuality === 'good' ? 'text-yellow-400' :
+                  connectionQuality === 'fair' ? 'text-orange-400' : 'text-red-400'
+                }`} />
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Call controls */}
+      {/* Call controls with smooth animations */}
       <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2">
-        <div className="flex items-center space-x-4 bg-black/50 backdrop-blur-sm rounded-full px-6 py-4">
+        <div className="flex items-center space-x-4 bg-black/70 backdrop-blur-md rounded-full px-6 py-4 shadow-2xl">
           <Button
             onClick={toggleMute}
             variant={isMuted ? "destructive" : "secondary"}
             size="lg"
-            className="rounded-full w-12 h-12"
+            className="rounded-full w-12 h-12 transition-all duration-200 hover:scale-110 active:scale-95"
           >
             {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
           </Button>
@@ -279,7 +324,7 @@ export function CallInterface({
               onClick={toggleVideo}
               variant={isVideoOff ? "destructive" : "secondary"}
               size="lg"
-              className="rounded-full w-12 h-12"
+              className="rounded-full w-12 h-12 transition-all duration-200 hover:scale-110 active:scale-95"
             >
               {isVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
             </Button>
@@ -289,7 +334,7 @@ export function CallInterface({
             onClick={handleEndCall}
             variant="destructive"
             size="lg"
-            className="rounded-full w-12 h-12"
+            className="rounded-full w-12 h-12 transition-all duration-200 hover:scale-110 active:scale-95 bg-red-600 hover:bg-red-700"
           >
             <PhoneOff className="h-5 w-5" />
           </Button>

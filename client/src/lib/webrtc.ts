@@ -1,4 +1,5 @@
 import { Socket } from 'socket.io-client';
+import { PerformanceMonitor, ConnectionQuality, StreamManager } from './performance';
 
 export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
@@ -8,6 +9,8 @@ export class WebRTCService {
   private chatId: string | null = null;
   private isInitiator = false;
   private isCallActive = false;
+  private performanceMonitor = PerformanceMonitor.getInstance();
+  private connectionQuality = ConnectionQuality.getInstance();
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
   private onCallEndCallback: (() => void) | null = null;
 
@@ -19,8 +22,13 @@ export class WebRTCService {
     const configuration = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' }
+      ],
+      iceCandidatePoolSize: 10,
+      bundlePolicy: 'max-bundle' as RTCBundlePolicy,
+      rtcpMuxPolicy: 'require' as RTCRtcpMuxPolicy
     };
 
     this.peerConnection = new RTCPeerConnection(configuration);
@@ -35,11 +43,19 @@ export class WebRTCService {
     };
 
     this.peerConnection.ontrack = (event) => {
+      const trackStartTime = performance.now();
       console.log('Received remote stream');
       this.remoteStream = event.streams[0];
+      StreamManager.addStream(this.remoteStream);
+      
       if (this.onRemoteStreamCallback) {
         this.onRemoteStreamCallback(this.remoteStream);
       }
+      
+      this.performanceMonitor.measureLatency('remote_stream_received', trackStartTime);
+      
+      // Start monitoring connection quality
+      this.monitorConnectionQuality();
     };
 
     this.peerConnection.onconnectionstatechange = () => {
@@ -88,21 +104,26 @@ export class WebRTCService {
     try {
       console.log('Getting user media...');
       
-      // Get user media
+      // Get user media with optimized settings for low latency
       this.localStream = await navigator.mediaDevices.getUserMedia({
         video: isVideo ? { 
-          width: { ideal: 1280 }, 
-          height: { ideal: 720 },
+          width: { ideal: 640, max: 1280 }, 
+          height: { ideal: 480, max: 720 },
+          frameRate: { ideal: 30, max: 30 },
           facingMode: 'user'
         } : false,
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1,
+          latency: 0.01 // Request low latency
         }
       });
 
       console.log('Got local stream:', this.localStream.getTracks().map(t => t.kind));
+      StreamManager.addStream(this.localStream);
 
       // Add local stream to peer connection
       if (this.peerConnection && this.localStream) {
@@ -111,14 +132,22 @@ export class WebRTCService {
           this.peerConnection!.addTrack(track, this.localStream!);
         });
 
-        // Create offer
+        // Create offer with optimized settings for low latency
         console.log('Creating offer...');
         const offer = await this.peerConnection.createOffer({
           offerToReceiveAudio: true,
-          offerToReceiveVideo: isVideo
+          offerToReceiveVideo: isVideo,
+          iceRestart: false
         });
-        await this.peerConnection.setLocalDescription(offer);
-        console.log('Local description set');
+        
+        // Modify SDP for lower latency
+        const modifiedOffer = {
+          ...offer,
+          sdp: this.optimizeSDP(offer.sdp || '')
+        };
+        
+        await this.peerConnection.setLocalDescription(modifiedOffer);
+        console.log('Local description set with optimizations');
 
         // Send offer through socket
         if (this.socket && this.chatId) {
@@ -161,6 +190,7 @@ export class WebRTCService {
       });
 
       console.log('Got local stream for answer:', this.localStream.getTracks().map(t => t.kind));
+      StreamManager.addStream(this.localStream);
 
       // Add local stream to peer connection (this will be done in handleCallOffer)
       // We don't add tracks here to avoid duplicate tracks
@@ -180,18 +210,22 @@ export class WebRTCService {
       console.log('Setting remote description...');
       await this.peerConnection.setRemoteDescription(data.offer);
       
-      // Get user media and add tracks
+      // Get user media and add tracks with optimized settings
       console.log('Getting user media for answer...');
       this.localStream = await navigator.mediaDevices.getUserMedia({
         video: data.isVideo ? { 
-          width: { ideal: 1280 }, 
-          height: { ideal: 720 },
+          width: { ideal: 640, max: 1280 }, 
+          height: { ideal: 480, max: 720 },
+          frameRate: { ideal: 30, max: 30 },
           facingMode: 'user'
         } : false,
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1,
+          latency: 0.01 // Request low latency
         }
       });
 
@@ -200,10 +234,17 @@ export class WebRTCService {
         this.peerConnection!.addTrack(track, this.localStream!);
       });
 
-      // Create answer
+      // Create answer with optimizations
       console.log('Creating answer...');
       const answer = await this.peerConnection.createAnswer();
-      await this.peerConnection.setLocalDescription(answer);
+      
+      // Modify SDP for lower latency
+      const modifiedAnswer = {
+        ...answer,
+        sdp: this.optimizeSDP(answer.sdp || '')
+      };
+      
+      await this.peerConnection.setLocalDescription(modifiedAnswer);
 
       // Send answer
       if (this.socket && this.chatId) {
@@ -250,8 +291,14 @@ export class WebRTCService {
 
     // Stop local stream
     if (this.localStream) {
-      this.localStream.getTracks().forEach(track => track.stop());
+      StreamManager.removeStream(this.localStream);
       this.localStream = null;
+    }
+
+    // Stop remote stream
+    if (this.remoteStream) {
+      StreamManager.removeStream(this.remoteStream);
+      this.remoteStream = null;
     }
 
     // Close peer connection
@@ -316,5 +363,61 @@ export class WebRTCService {
 
   isInCall() {
     return this.isCallActive;
+  }
+
+  private optimizeSDP(sdp: string): string {
+    // Optimize SDP for lower latency
+    let optimizedSDP = sdp;
+    
+    // Prefer VP8 over other codecs for lower latency
+    optimizedSDP = optimizedSDP.replace(
+      /m=video (\d+) RTP\/SAVPF (.+)/,
+      (match, port, codecs) => {
+        const codecList = codecs.split(' ');
+        const vp8Index = codecList.findIndex((codec: string) => 
+          optimizedSDP.includes(`a=rtpmap:${codec} VP8/90000`)
+        );
+        if (vp8Index !== -1) {
+          const vp8Codec = codecList.splice(vp8Index, 1)[0];
+          codecList.unshift(vp8Codec);
+        }
+        return `m=video ${port} RTP/SAVPF ${codecList.join(' ')}`;
+      }
+    );
+    
+    // Add low latency settings
+    optimizedSDP = optimizedSDP.replace(
+      /(a=rtpmap:\d+ VP8\/90000\r\n)/g,
+      '$1a=rtcp-fb:* goog-remb\r\na=rtcp-fb:* transport-cc\r\na=rtcp-fb:* ccm fir\r\na=rtcp-fb:* nack\r\na=rtcp-fb:* nack pli\r\n'
+    );
+    
+    // Optimize audio for low latency
+    optimizedSDP = optimizedSDP.replace(
+      /(a=rtpmap:\d+ opus\/48000\/2\r\n)/g,
+      '$1a=fmtp:* minptime=10;useinbandfec=1\r\n'
+    );
+    
+    return optimizedSDP;
+  }
+
+  private monitorConnectionQuality(): void {
+    if (!this.peerConnection) return;
+    
+    const monitor = setInterval(async () => {
+      if (!this.isCallActive || !this.peerConnection) {
+        clearInterval(monitor);
+        return;
+      }
+      
+      await this.connectionQuality.assessConnection(this.peerConnection);
+    }, 5000); // Check every 5 seconds
+  }
+
+  getConnectionQuality() {
+    return this.connectionQuality.getQuality();
+  }
+
+  getPerformanceMetrics() {
+    return this.performanceMonitor.getMetrics();
   }
 }
