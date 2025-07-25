@@ -79,7 +79,26 @@ export class WebRTCService {
 
     // Listen for WebRTC signaling events
     this.socket.on('call-offer', async (data: any) => {
-      console.log('Received call offer');
+      console.log('Received call offer, triggering notifications...');
+      
+      // Mobile vibration for incoming calls
+      if ('vibrate' in navigator) {
+        navigator.vibrate([200, 100, 200, 100, 200]);
+      }
+
+      // Browser notification for background calls
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const notification = new Notification(`Incoming ${data.isVideo ? 'Video' : 'Audio'} Call`, {
+          body: `Call from user`,
+          icon: '/favicon.ico',
+          tag: 'incoming-call',
+          requireInteraction: true
+        });
+        
+        // Auto-close notification after 30 seconds
+        setTimeout(() => notification.close(), 30000);
+      }
+      
       await this.handleCallOffer(data);
     });
 
@@ -104,20 +123,36 @@ export class WebRTCService {
     try {
       console.log('Getting user media...');
       
-      // Get user media with optimized settings for low latency
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: isVideo ? { 
-          width: { ideal: 640, max: 1280 }, 
-          height: { ideal: 480, max: 720 },
-          frameRate: { ideal: 30, max: 30 },
-          facingMode: 'user'
-        } : false,
+      // Get user media with mobile-friendly settings
+      const constraints: MediaStreamConstraints = {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
         }
-      });
+      };
+
+      if (isVideo) {
+        // Try mobile-optimized constraints first, fallback to basic if needed
+        try {
+          constraints.video = {
+            width: { ideal: 480, max: 640 }, 
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 15, max: 30 },
+            facingMode: 'user'
+          };
+          this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (error) {
+          console.log('Failed with mobile-optimized constraints, trying fallback...');
+          // Fallback to basic video constraints for problematic devices
+          constraints.video = {
+            facingMode: 'user'
+          };
+          this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        }
+      } else {
+        this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      }
 
       console.log('Got local stream:', this.localStream.getTracks().map(t => t.kind));
       StreamManager.addStream(this.localStream);
@@ -165,19 +200,25 @@ export class WebRTCService {
     try {
       console.log('Getting user media for answer...');
       
-      // Get user media with same constraints as offer
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: isVideo ? { 
-          width: { ideal: 1280 }, 
-          height: { ideal: 720 },
-          facingMode: 'user'
-        } : false,
+      // Get user media with mobile-friendly constraints
+      const constraints: MediaStreamConstraints = {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
         }
-      });
+      };
+
+      if (isVideo) {
+        constraints.video = {
+          width: { ideal: 480, max: 640 }, 
+          height: { ideal: 360, max: 480 },
+          frameRate: { ideal: 15, max: 30 },
+          facingMode: 'user'
+        };
+      }
+
+      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
 
       console.log('Got local stream for answer:', this.localStream.getTracks().map(t => t.kind));
       StreamManager.addStream(this.localStream);
@@ -200,21 +241,37 @@ export class WebRTCService {
       console.log('Setting remote description...');
       await this.peerConnection.setRemoteDescription(data.offer);
       
-      // Get user media and add tracks with optimized settings
+      // Get user media and add tracks with mobile-friendly settings
       console.log('Getting user media for answer...');
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: data.isVideo ? { 
-          width: { ideal: 640, max: 1280 }, 
-          height: { ideal: 480, max: 720 },
-          frameRate: { ideal: 30, max: 30 },
-          facingMode: 'user'
-        } : false,
+      const constraints: MediaStreamConstraints = {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
         }
-      });
+      };
+
+      if (data.isVideo) {
+        // Try mobile-optimized constraints first, fallback to basic if needed
+        try {
+          constraints.video = {
+            width: { ideal: 480, max: 640 }, 
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 15, max: 30 },
+            facingMode: 'user'
+          };
+          this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (error) {
+          console.log('Failed with mobile-optimized constraints for answer, trying fallback...');
+          // Fallback to basic video constraints for problematic devices
+          constraints.video = {
+            facingMode: 'user'
+          };
+          this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        }
+      } else {
+        this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      }
 
       console.log('Adding tracks to answer...');
       this.localStream.getTracks().forEach(track => {

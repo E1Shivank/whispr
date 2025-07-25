@@ -46,6 +46,15 @@ export default function Chat() {
   const webrtcServiceRef = useRef<WebRTCService>(new WebRTCService());
   const { toast } = useToast();
 
+  // Request notification permissions for mobile alerts
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        console.log('Notification permission:', permission);
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (!chatId) return;
 
