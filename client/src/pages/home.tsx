@@ -136,7 +136,7 @@ export default function Home() {
           </div>
 
           {/* Key Features */}
-          <div className="grid md:grid-cols-3 gap-8 text-sm text-muted-foreground">
+          <div className="grid md:grid-cols-4 gap-6 text-sm text-muted-foreground">
             <div className="flex items-center justify-center space-x-2">
               <Check className="h-4 w-4 text-foreground" />
               <span>No registration required</span>
@@ -148,6 +148,10 @@ export default function Home() {
             <div className="flex items-center justify-center space-x-2">
               <Lock className="h-4 w-4 text-foreground" />
               <span>No message storage</span>
+            </div>
+            <div className="flex items-center justify-center space-x-2">
+              <Phone className="h-4 w-4 text-foreground" />
+              <span>Ephemeral file sharing</span>
             </div>
           </div>
         </div>
@@ -216,9 +220,9 @@ export default function Home() {
               <div className="w-10 h-10 bg-foreground rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <MessageCircle className="h-5 w-5 text-background" />
               </div>
-              <h3 className="text-lg font-semibold mb-3">Real-time</h3>
+              <h3 className="text-lg font-semibold mb-3">Ephemeral Files</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                Instant messaging with typing indicators and delivery confirmations.
+                Share images that disappear after 20 seconds with screenshot protection for maximum privacy.
               </p>
             </div>
 

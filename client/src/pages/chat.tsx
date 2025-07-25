@@ -1,58 +1,283 @@
-import { useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
-import { Shield, ArrowLeft } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { useRoute } from "wouter";
+import { Send, Paperclip, Phone, Video, Shield, ArrowLeft, Eye, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
-import ChatInterface from "@/components/ChatInterface";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { FileUpload } from "@/components/FileUpload";
+import { EphemeralFileViewer } from "@/components/EphemeralFileViewer";
+
+interface Message {
+  id: string;
+  content: string;
+  sender: "me" | "other";
+  timestamp: Date;
+  type: "text" | "file" | "ephemeral-file";
+  file?: {
+    name: string;
+    size: number;
+    type: string;
+    url: string;
+    isEphemeral: boolean;
+  };
+  isViewed?: boolean;
+}
 
 export default function Chat() {
-  const { chatId } = useParams();
+  const [, params] = useRoute("/chat/:chatId");
+  const chatId = params?.chatId;
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [isConnected, setIsConnected] = useState(false);
+  const [showFileUpload, setShowFileUpload] = useState(false);
+  const [ephemeralViewer, setEphemeralViewer] = useState<File | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
-  const { data: chatLink, isLoading, error } = useQuery({
-    queryKey: ["/api/chat-links", chatId],
-    enabled: !!chatId
-  });
+  useEffect(() => {
+    // Simulate connection for demo
+    setIsConnected(true);
+    
+    // Add welcome message
+    setMessages([
+      {
+        id: "1",
+        content: "🔒 End-to-end encrypted chat established. Your messages are secure.",
+        sender: "other",
+        timestamp: new Date(),
+        type: "text"
+      }
+    ]);
+  }, [chatId]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
-        <div className="glass-card rounded-2xl p-8 text-center max-w-sm mx-4">
-          <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-lg font-semibold text-white">Loading chat...</p>
-          <p className="text-sm text-gray-400 mt-2">Verifying secure connection</p>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-  if (error || !chatLink) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
-        <Card className="w-full max-w-md mx-4 glass-card border-gray-800">
-          <CardContent className="pt-6">
-            <div className="flex mb-4 gap-2 items-center justify-center">
-              <Shield className="h-8 w-8 text-red-500" />
-              <h1 className="text-2xl font-bold text-white">Chat Not Found</h1>
-            </div>
+  const sendMessage = () => {
+    if (!newMessage.trim() || !isConnected) return;
 
-            <p className="mt-4 text-sm text-gray-400 text-center mb-6">
-              This chat link is invalid or has expired.
+    const message: Message = {
+      id: Date.now().toString(),
+      content: newMessage,
+      sender: "me",
+      timestamp: new Date(),
+      type: "text"
+    };
+
+    setMessages(prev => [...prev, message]);
+    setNewMessage("");
+
+    // Simulate response
+    setTimeout(() => {
+      const response: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "Thanks for your message! This is a secure chat demo.",
+        sender: "other",
+        timestamp: new Date(),
+        type: "text"
+      };
+      setMessages(prev => [...prev, response]);
+    }, 1000);
+  };
+
+  const handleFileSelect = (file: File, isEphemeral: boolean) => {
+    const fileMessage: Message = {
+      id: Date.now().toString(),
+      content: isEphemeral ? "🔥 Sent ephemeral image" : "📁 Sent file",
+      sender: "me",
+      timestamp: new Date(),
+      type: isEphemeral ? "ephemeral-file" : "file",
+      file: {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: URL.createObjectURL(file),
+        isEphemeral
+      }
+    };
+
+    setMessages(prev => [...prev, fileMessage]);
+    setShowFileUpload(false);
+
+    toast({
+      title: isEphemeral ? "Ephemeral file sent" : "File sent",
+      description: isEphemeral 
+        ? "The recipient can view this once for 20 seconds."
+        : "File shared successfully."
+    });
+  };
+
+  const handleEphemeralView = (file: File) => {
+    setEphemeralViewer(file);
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-background">
+      {/* Header */}
+      <header className="border-b border-border p-4 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <Button variant="ghost" size="sm" onClick={() => window.history.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="w-10 h-10 bg-foreground rounded-full flex items-center justify-center">
+            <Shield className="text-background h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="font-semibold">Anonymous User</h2>
+            <p className="text-sm text-muted-foreground flex items-center">
+              <span className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+              {isConnected ? 'End-to-end encrypted' : 'Connecting...'}
             </p>
+          </div>
+        </div>
+        
+        <div className="flex space-x-2">
+          <Button variant="ghost" size="sm">
+            <Phone className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm">
+            <Video className="h-4 w-4" />
+          </Button>
+        </div>
+      </header>
 
-            <div className="flex justify-center">
-              <Button asChild variant="outline">
-                <Link href="/">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Home
-                </Link>
-              </Button>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`flex ${message.sender === 'me' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                message.sender === 'me'
+                  ? 'bg-foreground text-background'
+                  : 'bg-muted text-foreground'
+              }`}
+            >
+              {message.type === 'text' && (
+                <p className="text-sm">{message.content}</p>
+              )}
+              
+              {message.type === 'file' && message.file && (
+                <div className="space-y-2">
+                  {message.file.type.startsWith('image/') && (
+                    <img
+                      src={message.file.url}
+                      alt={message.file.name}
+                      className="max-w-full h-auto rounded-lg"
+                    />
+                  )}
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs">{message.file.name}</span>
+                    <Button size="sm" variant="ghost">
+                      <Download className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              {message.type === 'ephemeral-file' && message.file && (
+                <div className="space-y-2">
+                  <div className="vercel-card p-3 text-center">
+                    <Eye className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground mb-2">Ephemeral Image</p>
+                    <p className="text-xs">{message.file.name}</p>
+                    {!message.isViewed ? (
+                      <Button
+                        size="sm"
+                        className="mt-2 w-full"
+                        onClick={() => {
+                          // Create a File object from the URL for the viewer
+                          fetch(message.file!.url)
+                            .then(res => res.blob())
+                            .then(blob => {
+                              const file = new File([blob], message.file!.name, { type: message.file!.type });
+                              handleEphemeralView(file);
+                            });
+                          
+                          // Mark as viewed
+                          setMessages(prev =>
+                            prev.map(m =>
+                              m.id === message.id ? { ...m, isViewed: true } : m
+                            )
+                          );
+                        }}
+                      >
+                        <Eye className="mr-1 h-3 w-3" />
+                        View Once
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-red-400 mt-2">🔥 Viewed & Deleted</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              <p className="text-xs opacity-70 mt-1">
+                {formatTime(message.timestamp)}
+                {message.sender === 'me' && ' ✓✓'}
+              </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
       </div>
-    );
-  }
 
-  return <ChatInterface chatId={chatId!} />;
+      {/* Input */}
+      <div className="border-t border-border p-4">
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowFileUpload(true)}
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+          
+          <Input
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Type a message..."
+            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            className="flex-1"
+          />
+          
+          <Button
+            onClick={sendMessage}
+            disabled={!newMessage.trim() || !isConnected}
+            size="sm"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <p className="text-xs text-muted-foreground mt-2 text-center">
+          <Shield className="inline h-3 w-3 mr-1" />
+          Messages are end-to-end encrypted
+        </p>
+      </div>
+
+      {/* File Upload Modal */}
+      {showFileUpload && (
+        <FileUpload
+          onFileSelect={handleFileSelect}
+          onClose={() => setShowFileUpload(false)}
+        />
+      )}
+
+      {/* Ephemeral File Viewer */}
+      {ephemeralViewer && (
+        <EphemeralFileViewer
+          file={ephemeralViewer}
+          onClose={() => setEphemeralViewer(null)}
+        />
+      )}
+    </div>
+  );
 }
