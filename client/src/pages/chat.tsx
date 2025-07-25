@@ -69,13 +69,50 @@ export default function Chat() {
 
     // Handle receiving messages
     socket.on('receive-message', (data: any) => {
-      const message: Message = {
-        id: data.messageId || Date.now().toString(),
-        content: data.encryptedContent, // In demo, we'll treat as plain text
-        sender: data.senderId === userIdRef.current ? "me" : "other",
-        timestamp: new Date(data.timestamp),
-        type: "text"
-      };
+      let message: Message;
+      
+      try {
+        // Try to parse as file data
+        const parsedContent = JSON.parse(data.encryptedContent);
+        
+        if (parsedContent.type === 'file') {
+          // Create blob URL from base64 data
+          const byteCharacters = atob(parsedContent.fileData.split(',')[1]);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: parsedContent.fileType });
+          const fileUrl = URL.createObjectURL(blob);
+          
+          message = {
+            id: data.messageId || Date.now().toString(),
+            content: parsedContent.isEphemeral ? "🔥 Sent ephemeral image" : "📁 Sent file",
+            sender: data.senderId === userIdRef.current ? "me" : "other",
+            timestamp: new Date(data.timestamp),
+            type: parsedContent.isEphemeral ? "ephemeral-file" : "file",
+            file: {
+              name: parsedContent.fileName,
+              size: parsedContent.fileSize,
+              type: parsedContent.fileType,
+              url: fileUrl,
+              isEphemeral: parsedContent.isEphemeral
+            }
+          };
+        } else {
+          throw new Error('Not file data');
+        }
+      } catch {
+        // Regular text message
+        message = {
+          id: data.messageId || Date.now().toString(),
+          content: data.encryptedContent,
+          sender: data.senderId === userIdRef.current ? "me" : "other",
+          timestamp: new Date(data.timestamp),
+          type: "text"
+        };
+      }
       
       setMessages(prev => [...prev, message]);
     });
@@ -165,30 +202,58 @@ export default function Chat() {
   };
 
   const handleFileSelect = (file: File, isEphemeral: boolean) => {
-    const fileMessage: Message = {
-      id: Date.now().toString(),
-      content: isEphemeral ? "🔥 Sent ephemeral image" : "📁 Sent file",
-      sender: "me",
-      timestamp: new Date(),
-      type: isEphemeral ? "ephemeral-file" : "file",
-      file: {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        url: URL.createObjectURL(file),
-        isEphemeral
+    // Convert file to base64 for transmission
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64Data = reader.result as string;
+      const messageId = crypto.randomUUID();
+      
+      const fileMessage: Message = {
+        id: messageId,
+        content: isEphemeral ? "🔥 Sent ephemeral image" : "📁 Sent file",
+        sender: "me",
+        timestamp: new Date(),
+        type: isEphemeral ? "ephemeral-file" : "file",
+        file: {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          url: URL.createObjectURL(file),
+          isEphemeral
+        }
+      };
+
+      // Add to local messages immediately
+      setMessages(prev => [...prev, fileMessage]);
+
+      // Send file data through socket
+      if (socketRef.current) {
+        socketRef.current.emit('send-message', {
+          chatId,
+          encryptedContent: JSON.stringify({
+            type: 'file',
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            fileData: base64Data,
+            isEphemeral: isEphemeral
+          }),
+          messageId,
+          recipientId: null
+        });
       }
+
+      setShowFileUpload(false);
+
+      toast({
+        title: isEphemeral ? "Ephemeral file sent" : "File sent",
+        description: isEphemeral 
+          ? "The recipient can view this once for 20 seconds."
+          : "File shared successfully."
+      });
     };
 
-    setMessages(prev => [...prev, fileMessage]);
-    setShowFileUpload(false);
-
-    toast({
-      title: isEphemeral ? "Ephemeral file sent" : "File sent",
-      description: isEphemeral 
-        ? "The recipient can view this once for 20 seconds."
-        : "File shared successfully."
-    });
+    reader.readAsDataURL(file);
   };
 
   const handleEphemeralView = (file: File) => {
@@ -282,6 +347,14 @@ export default function Chat() {
                             .then(blob => {
                               const file = new File([blob], message.file!.name, { type: message.file!.type });
                               handleEphemeralView(file);
+                            })
+                            .catch(err => {
+                              console.error('Error loading ephemeral file:', err);
+                              toast({
+                                title: "Error",
+                                description: "Failed to load ephemeral file",
+                                variant: "destructive"
+                              });
                             });
                           
                           // Mark as viewed
