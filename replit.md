@@ -28,6 +28,10 @@ Preferred communication style: Simple, everyday language.
 ✓ Fixed real-time messaging to replace demo responses with WebSocket communication
 ✓ Implemented file transmission through WebSocket using base64 encoding
 ✓ Added proper file reception and display for all users in chat
+✓ Implemented complete WebRTC-based video and audio calling system
+✓ Added call interface with mute, video toggle, and call duration features
+✓ Built incoming call notification system with answer/reject options
+✓ Integrated WebRTC signaling through existing Socket.IO server
 
 ## System Architecture
 
@@ -73,6 +77,9 @@ The application follows a modern full-stack architecture with clear separation b
 - **File Sharing System**: Ephemeral file upload with drag-and-drop interface
 - **Ephemeral Viewer**: Screenshot-protected image viewer with 20-second timer
 - **Chat Interface**: Real-time messaging with file sharing capabilities
+- **WebRTC Calling**: Full video and audio calling system with call controls
+- **Call Interface**: Professional call UI with mute, video toggle, and duration display
+- **Call Management**: Incoming call notifications with answer/reject functionality
 
 ### API Endpoints
 - `POST /api/chat-links`: Create new chat link with secure random ID

@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { FileUpload } from "@/components/FileUpload";
 import { EphemeralFileViewer } from "@/components/EphemeralFileViewer";
+import { CallInterface } from "@/components/CallInterface";
+import { WebRTCService } from "@/lib/webrtc";
 import { io, Socket } from "socket.io-client";
 
 interface Message {
@@ -34,10 +36,14 @@ export default function Chat() {
   const [ephemeralViewer, setEphemeralViewer] = useState<File | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [connectedUsers, setConnectedUsers] = useState(1);
+  const [isInCall, setIsInCall] = useState(false);
+  const [isIncomingCall, setIsIncomingCall] = useState(false);
+  const [isVideoCall, setIsVideoCall] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const userIdRef = useRef<string>(crypto.randomUUID());
+  const webrtcServiceRef = useRef<WebRTCService>(new WebRTCService());
   const { toast } = useToast();
 
   useEffect(() => {
@@ -60,6 +66,9 @@ export default function Chat() {
         userId: userIdRef.current,
         publicKey: null // For demo, we'll skip E2EE key exchange
       });
+
+      // Setup WebRTC service
+      webrtcServiceRef.current.setSocket(socket, chatId);
     });
 
     socket.on('disconnect', () => {
@@ -144,6 +153,26 @@ export default function Chat() {
         type: "text"
       };
       setMessages(prev => [...prev, leaveMessage]);
+    });
+
+    // Handle call events
+    socket.on('call-offer', (data: any) => {
+      console.log('Incoming call offer');
+      setIsIncomingCall(true);
+      setIsVideoCall(data.isVideo);
+    });
+
+    socket.on('call-answer', () => {
+      console.log('Call answered');
+      setIsInCall(true);
+      setIsIncomingCall(false);
+    });
+
+    socket.on('call-end', () => {
+      console.log('Call ended');
+      setIsInCall(false);
+      setIsIncomingCall(false);
+      setIsVideoCall(false);
     });
 
     // Handle typing indicators - the server doesn't currently send typing events in this format
@@ -260,6 +289,43 @@ export default function Chat() {
     setEphemeralViewer(file);
   };
 
+  const handleStartCall = async (isVideo: boolean) => {
+    try {
+      setIsVideoCall(isVideo);
+      const localStream = await webrtcServiceRef.current.startCall(isVideo);
+      setIsInCall(true);
+      
+      toast({
+        title: `${isVideo ? 'Video' : 'Audio'} call started`,
+        description: "Waiting for the other user to answer..."
+      });
+    } catch (error) {
+      console.error('Error starting call:', error);
+      toast({
+        title: "Call failed",
+        description: "Could not access camera/microphone. Please check permissions.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAnswerCall = () => {
+    setIsInCall(true);
+    setIsIncomingCall(false);
+  };
+
+  const handleRejectCall = () => {
+    setIsIncomingCall(false);
+    setIsVideoCall(false);
+    webrtcServiceRef.current.endCall();
+  };
+
+  const handleEndCall = () => {
+    setIsInCall(false);
+    setIsIncomingCall(false);
+    setIsVideoCall(false);
+  };
+
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
@@ -285,10 +351,20 @@ export default function Chat() {
         </div>
         
         <div className="flex space-x-2">
-          <Button variant="ghost" size="sm">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handleStartCall(false)}
+            disabled={isInCall || isIncomingCall}
+          >
             <Phone className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handleStartCall(true)}
+            disabled={isInCall || isIncomingCall}
+          >
             <Video className="h-4 w-4" />
           </Button>
         </div>
@@ -432,6 +508,18 @@ export default function Chat() {
         <EphemeralFileViewer
           file={ephemeralViewer}
           onClose={() => setEphemeralViewer(null)}
+        />
+      )}
+
+      {/* Call Interface */}
+      {(isInCall || isIncomingCall) && (
+        <CallInterface
+          webrtcService={webrtcServiceRef.current}
+          isIncomingCall={isIncomingCall}
+          isVideoCall={isVideoCall}
+          onCallEnd={handleEndCall}
+          onCallAnswer={handleAnswerCall}
+          onCallReject={handleRejectCall}
         />
       )}
     </div>
