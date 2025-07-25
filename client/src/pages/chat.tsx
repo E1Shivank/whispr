@@ -291,7 +291,21 @@ export default function Chat() {
 
   const handleStartCall = async (isVideo: boolean) => {
     try {
+      console.log(`Starting ${isVideo ? 'video' : 'audio'} call...`);
       setIsVideoCall(isVideo);
+      
+      // Check for media permissions first
+      const constraints = {
+        video: isVideo,
+        audio: true
+      };
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('Media access granted:', { video: isVideo, audio: true });
+      
+      // Stop the test stream and start the actual call
+      stream.getTracks().forEach(track => track.stop());
+      
       const localStream = await webrtcServiceRef.current.startCall(isVideo);
       setIsInCall(true);
       
@@ -301,11 +315,27 @@ export default function Chat() {
       });
     } catch (error) {
       console.error('Error starting call:', error);
+      
+      let errorMessage = "Could not start call. ";
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError') {
+          errorMessage += "Camera/microphone access denied. Please allow permissions and try again.";
+        } else if (error.name === 'NotFoundError') {
+          errorMessage += "No camera or microphone found.";
+        } else {
+          errorMessage += error.message;
+        }
+      }
+      
       toast({
         title: "Call failed",
-        description: "Could not access camera/microphone. Please check permissions.",
+        description: errorMessage,
         variant: "destructive"
       });
+      
+      // Reset call state on error
+      setIsInCall(false);
+      setIsVideoCall(false);
     }
   };
 
@@ -315,12 +345,14 @@ export default function Chat() {
   };
 
   const handleRejectCall = () => {
+    console.log('Rejecting call');
     setIsIncomingCall(false);
     setIsVideoCall(false);
-    webrtcServiceRef.current.endCall();
+    webrtcServiceRef.current.endCall(true); // Notify remote peer
   };
 
   const handleEndCall = () => {
+    console.log('Handling end call in chat');
     setIsInCall(false);
     setIsIncomingCall(false);
     setIsVideoCall(false);

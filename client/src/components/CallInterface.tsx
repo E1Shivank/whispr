@@ -33,15 +33,18 @@ export function CallInterface({
   useEffect(() => {
     // Set up remote stream handler
     webrtcService.onRemoteStream((stream) => {
+      console.log('Received remote stream');
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
         setIsConnected(true);
         startCallTimer();
+        console.log('Remote stream connected');
       }
     });
 
     // Set up call end handler
     webrtcService.onCallEnd(() => {
+      console.log('Call ended callback triggered');
       setIsConnected(false);
       stopCallTimer();
       onCallEnd();
@@ -69,10 +72,14 @@ export function CallInterface({
 
   const handleAnswerCall = async () => {
     try {
+      console.log(`Answering ${isVideoCall ? 'video' : 'audio'} call...`);
       const localStream = await webrtcService.answerCall(isVideoCall);
-      if (localVideoRef.current && isVideoCall) {
+      
+      if (localVideoRef.current && isVideoCall && localStream) {
         localVideoRef.current.srcObject = localStream;
+        console.log('Local video stream set');
       }
+      
       onCallAnswer();
     } catch (error) {
       console.error('Error answering call:', error);
@@ -81,7 +88,8 @@ export function CallInterface({
   };
 
   const handleEndCall = () => {
-    webrtcService.endCall();
+    console.log('Handling end call in UI');
+    webrtcService.endCall(true); // Notify remote peer
     stopCallTimer();
     onCallEnd();
   };

@@ -7,6 +7,7 @@ export class WebRTCService {
   private socket: Socket | null = null;
   private chatId: string | null = null;
   private isInitiator = false;
+  private isCallActive = false;
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
   private onCallEndCallback: (() => void) | null = null;
 
@@ -54,6 +55,12 @@ export class WebRTCService {
     this.socket = socket;
     this.chatId = chatId;
 
+    // Remove existing listeners to prevent duplicates
+    this.socket.off('call-offer');
+    this.socket.off('call-answer');
+    this.socket.off('ice-candidate');
+    this.socket.off('call-end');
+
     // Listen for WebRTC signaling events
     this.socket.on('call-offer', async (data: any) => {
       console.log('Received call offer');
@@ -71,31 +78,53 @@ export class WebRTCService {
 
     this.socket.on('call-end', () => {
       console.log('Call ended by remote peer');
-      this.endCall();
+      if (this.isCallActive) {
+        this.endCall(false); // Don't emit call-end back
+      }
     });
   }
 
   async startCall(isVideo: boolean = false): Promise<MediaStream> {
     try {
+      console.log('Getting user media...');
+      
       // Get user media
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: isVideo,
-        audio: true
+        video: isVideo ? { 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 },
+          facingMode: 'user'
+        } : false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
       });
+
+      console.log('Got local stream:', this.localStream.getTracks().map(t => t.kind));
 
       // Add local stream to peer connection
       if (this.peerConnection && this.localStream) {
         this.localStream.getTracks().forEach(track => {
+          console.log('Adding track to peer connection:', track.kind);
           this.peerConnection!.addTrack(track, this.localStream!);
         });
 
         // Create offer
-        const offer = await this.peerConnection.createOffer();
+        console.log('Creating offer...');
+        const offer = await this.peerConnection.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: isVideo
+        });
         await this.peerConnection.setLocalDescription(offer);
+        console.log('Local description set');
 
         // Send offer through socket
         if (this.socket && this.chatId) {
           this.isInitiator = true;
+          this.isCallActive = true;
+          console.log('Sending call offer...');
           this.socket.emit('call-offer', {
             chatId: this.chatId,
             offer: offer,
@@ -108,6 +137,7 @@ export class WebRTCService {
       return this.localStream;
     } catch (error) {
       console.error('Error starting call:', error);
+      this.isInitiator = false;
       throw error;
     }
   }
@@ -136,26 +166,41 @@ export class WebRTCService {
 
   private async handleCallOffer(data: any) {
     try {
+      console.log('Handling call offer:', data);
       if (!this.peerConnection) return;
 
+      console.log('Setting remote description...');
       await this.peerConnection.setRemoteDescription(data.offer);
       
       // Get user media and add tracks
+      console.log('Getting user media for answer...');
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: data.isVideo,
-        audio: true
+        video: data.isVideo ? { 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 },
+          facingMode: 'user'
+        } : false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
       });
 
+      console.log('Adding tracks to answer...');
       this.localStream.getTracks().forEach(track => {
         this.peerConnection!.addTrack(track, this.localStream!);
       });
 
       // Create answer
+      console.log('Creating answer...');
       const answer = await this.peerConnection.createAnswer();
       await this.peerConnection.setLocalDescription(answer);
 
       // Send answer
       if (this.socket && this.chatId) {
+        this.isCallActive = true;
+        console.log('Sending answer...');
         this.socket.emit('call-answer', {
           chatId: this.chatId,
           answer: answer,
@@ -185,8 +230,15 @@ export class WebRTCService {
     }
   }
 
-  endCall() {
-    console.log('Ending call');
+  endCall(shouldNotifyRemote: boolean = true) {
+    console.log('Ending call, shouldNotifyRemote:', shouldNotifyRemote);
+
+    if (!this.isCallActive) {
+      console.log('Call already ended');
+      return;
+    }
+
+    this.isCallActive = false;
 
     // Stop local stream
     if (this.localStream) {
@@ -200,8 +252,9 @@ export class WebRTCService {
       this.setupPeerConnection(); // Reset for next call
     }
 
-    // Notify remote peer
-    if (this.socket && this.chatId) {
+    // Notify remote peer only if requested and we're active in the call
+    if (shouldNotifyRemote && this.socket && this.chatId) {
+      console.log('Notifying remote peer of call end');
       this.socket.emit('call-end', { chatId: this.chatId });
     }
 
@@ -253,8 +306,7 @@ export class WebRTCService {
     return this.remoteStream;
   }
 
-  isCallActive() {
-    return this.peerConnection?.connectionState === 'connected' || 
-           this.peerConnection?.connectionState === 'connecting';
+  isInCall() {
+    return this.isCallActive;
   }
 }
